@@ -1,0 +1,56 @@
+[project]
+name = "pixforge"
+version = "0.1.0"
+description = "Pixforge: local AI photo upscaler based on HAT"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "numpy>=2.0",
+    "pillow>=11.0",
+    "opencv-python-headless>=4.10",
+    "onnxruntime-directml>=1.20",
+]
+
+[project.optional-dependencies]
+# Only needed for converting weights to ONNX (developer machine).
+export = [
+    "torch>=2.5",
+    "onnx>=1.17",
+    "onnxscript>=0.1",
+    "gdown>=5.2",
+]
+
+[project.scripts]
+pixforge = "pixforge.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+# torch from the CPU-only index keeps the export environment small.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixforge"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

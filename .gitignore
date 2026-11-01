@@ -1,0 +1,39 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / Electron
+node_modules/
+app/dist/
+app/dist-electron/
+app/release/
+*.tsbuildinfo
+
+# Build outputs
+build/
+dist/
+backend/build/
+backend/dist/
+
+# Models and weights (never commit)
+models/
+*.pth
+*.pt
+*.onnx
+*.onnx.data
+*.safetensors
+
+# Benchmark / test scratch
+bench/out/
+testdata/private/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
