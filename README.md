@@ -4,7 +4,7 @@ Lokaler KI-Upscaler für Fotos auf Basis von **HAT** (Hybrid Attention Transform
 Bild hineinziehen, Modell wählen, fertig. Alles läuft auf dem eigenen Rechner, ohne Konto
 und ohne Telemetrie.
 
-> **Status:** in Entwicklung (Etappe 1 von 6: Inferenz-Backend und Benchmarks).
+> **Status:** in Entwicklung (Etappe 2 von 6: Bildpipeline und Kommandozeile).
 > Einen Installer gibt es noch nicht. Screenshot folgt mit der Oberfläche in Etappe 4.
 
 ## Für Anwenderinnen und Anwender
@@ -25,7 +25,30 @@ uv run pytest
 
 Hinter einem HTTPS-prüfenden Virenscanner (z. B. Avast) vorher `UV_SYSTEM_CERTS=1` setzen.
 
+### Kommandozeile
+
+```powershell
+uv run pixforge foto.jpg -o out                      # 4x mit „Fotos (Standard)“
+uv run pixforge C:\Bilder --width 6000 --faces       # ganzer Ordner, Gesichter verbessern
+uv run pixforge scan.tif --model clean --scale 2 --format tiff --bits 16
+uv run pixforge --list-models                        # installierte Modelle
+uv run pixforge --list-devices                       # gefundene GPUs
+```
+
+Weitere Optionen: `--denoise auto|off|on|0-100`, `--jpeg`, `--sharpen`, `--detail`,
+`--grain`, `--face-model face-gfpgan`, `--pattern "{name}_{scale}_{model}"`,
+`--exists rename|overwrite|skip`, `--device cpu|gpu:0`, siehe `pixforge --help`.
+
 ### Modelle konvertieren
+
+Alle Modelle aus `backend/src/pixforge/models/models.json` auf einmal erzeugen (landen in
+`%LOCALAPPDATA%\Pixforge\models`, Hashes werden in `models.json` eingetragen):
+
+```powershell
+uv run python -m pixforge.models.build --weights ..\weights
+```
+
+Einzelne Modelle:
 
 Die Original-Gewichte (siehe `THIRD_PARTY.md`) liegen nicht im Repository. Konvertierung nach
 ONNX, als FP32 oder gemischtes FP16 (für GPUs):

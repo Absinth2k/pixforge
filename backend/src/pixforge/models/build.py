@@ -85,7 +85,8 @@ def main() -> int:
                 "sha256": sha256(path),
                 "size": path.stat().st_size,
             }
-    reg_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    reg_file.write_text(text, encoding="utf-8", newline="\n")  # LF on Windows too
     print(f"registry updated: {reg_file}")
     return 0
 

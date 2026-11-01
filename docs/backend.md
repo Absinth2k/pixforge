@@ -171,14 +171,53 @@ und Detail-Erhalt (Laplace-Energie im Verhältnis zum Original, auf halber Aufl�
      vollständig, lässt aber oft bewusst feines Helligkeitskorn stehen (ein DxO-Bild hat
      Luma-σ 5,7 bei Chroma 0,16). Das Korn ist gewollt und wird nicht weggerechnet.
    - **Kein Rauschen:** Luma-σ < 1,5 → Regler auf 0, Hinweis „kein Rauschen erkannt“.
-   - **Sonst:** Startwert aus Luma-σ, frei überschreibbar.
+   - **Schwarz-Weiß-Bilder** haben nie Farbrauschen; für sie gilt nur die Luma-Regel
+     (Farbigkeit |Cb|+|Cr| < 2 erkennt sie).
+   - **Kein Rauschen:** Luma-σ < 1,5 → Regler auf 0, Hinweis „kein Rauschen erkannt“.
+   - **Sonst:** Startwert nach Punkt 3, frei überschreibbar.
    Damit werden Andres DxO-Fotos nicht doppelt entrauscht. Der Regler bleibt in allen Fällen
    bedienbar, und die Vorschau zeigt „Original / nur entrauscht / Endergebnis“.
-3. **Stärke als Mischung** Original ↔ SCUNet, Startwert aus der Messung, dazu eine Kantenmaske
-   für den Detailschutz (in glatten Flächen stärker, an Kanten und Textur schwächer).
-4. **Real-HAT-GAN entrauscht selbst leicht**, die Automatik dort zurücknehmen (wie geplant).
-5. Kosten: SCUNet FP16 braucht **0,34 s/MP**, NAFNet FP16 0,22 s/MP, nlmeans (CPU) 0,44 s/MP.
+3. **Restrauschen wird beim Hochskalieren verstärkt** (Etappe 2, Test mit einem Ausschnitt
+   aus IMG_3629, Luma-σ 6,5, siehe Vergleichsbilder unten). Die Stärke ist eine Mischung
+   Original ↔ SCUNet, und was davon an Rauschen übrig bleibt, machen beide Modellfamilien zu
+   „Würmern“ oder grobem Korn, sobald es über σ ≈ 1,5 liegt. Deshalb:
+   - **Foto-Modelle (Real-HAT-GAN):** Sie entfernen sogar starkes Sensorrauschen selbst und
+     sauber. Ohne Vorentrauschen war das Ergebnis genauso gut wie mit 100 % SCUNet, jede
+     Teilmischung war schlechter. Die Automatik bleibt dort **aus** (Hinweis „das Fotomodell
+     entfernt es selbst“), lässt sich aber einschalten.
+   - **Saubere Bilder / Maximale Qualität:** Ohne Entrauschen wird Rauschen massiv verstärkt.
+     Die Automatik wählt die Stärke so, dass rund **σ 0,8 Restrauschen** bleibt:
+     Stärke = 1 − 0,8/σ (σ 6,5 → 88 %, σ 2 → 60 %). Das wirkt natürlicher als 100 %, das
+     Flächen wachsartig glättet.
+   - **Detailschutz** (Kantenmaske) nur bei leichtem Rauschen: voll bis σ 1,5, aus ab σ 3.
+     Bei starkem Rauschen hätte er genau an den Kanten das Rauschen konserviert, wo der
+     Upscaler am empfindlichsten ist.
+   - **Farbrauschen** wird immer 1,5× stärker entfernt als Helligkeitsrauschen.
+4. Kosten: SCUNet FP16 braucht **0,34 s/MP**, NAFNet FP16 0,22 s/MP, nlmeans (CPU) 0,44 s/MP.
    Neben HAT (10 s/MP) fällt das nicht ins Gewicht.
+
+## 4b. Gesichter (Etappe 2)
+
+- **Erkennung:** YuNet (MIT, 230 KB) über OpenCV. YuNet ist auf kleine bis mittlere Gesichter
+  trainiert; ein bildfüllendes Porträt findet es nur verkleinert, winzige Gesichter einer
+  Gruppe nur groß. Pixforge sucht deshalb auf **640 und 1600 px** und führt die Treffer per NMS
+  zusammen. Auf dem Gruppenfoto der Solvay-Konferenz 1927 (900 px breit, 29 Personen) findet
+  es alle 29 Gesichter.
+- **Fehlalarme:** Eine Fensternische erreichte Score 0,72, echte Gesichter 0,86–0,92. Ein
+  Restaurierer malt in Fehlalarme Haare und Augen hinein. Darum Schwelle 0,8 und eine
+  Plausibilitätsprüfung der Merkmalspunkte (Nase zwischen Augen und Mund, Augenabstand
+  20–80 % der Boxbreite).
+- **Restaurierung:** Ausrichtung auf die FFHQ-Vorlage (512 px), Modell, Rückprojektion mit
+  weicher ovaler Maske (Stirn bis Kinn). Gesichter, die im Ergebnis größer als 512 px sind,
+  würden durch das 512-px-Modell weicher statt schärfer: Die Wirkung blendet zwischen 512 und
+  1024 px Gesichtsgröße linear aus.
+- **Modelle:** RestoreFormer++ (Standard, Apache-2.0) wirkt schärfer und kontrastreicher,
+  GFPGAN 1.4 glatter („Beauty“-Look). Beide verbessern Augen und Mund kleiner Gesichter
+  deutlich gegenüber HAT allein. GFPGAN ist nur ein optionaler Download mit Hinweis auf die
+  nicht-kommerzielle NVIDIA-Klausel.
+- **Parität:** RestoreFormer++ ONNX vs. PyTorch 104 dB (CPU) / 107 dB (DirectML), GFPGAN
+  130 / 129 dB. GFPGAN läuft mit festem statt zufälligem Rauscheingang, damit Vorschau und
+  Export identisch sind.
 
 ## 5. PyTorch mit ROCm unter Windows (optional, nur Entwicklung)
 
