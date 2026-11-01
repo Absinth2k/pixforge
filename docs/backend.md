@@ -161,12 +161,21 @@ und Detail-Erhalt (Laplace-Energie im Verhältnis zum Original, auf halber Aufl�
 2. **Automatik in drei Fällen** (kalibriert an 5 unbearbeiteten RAWs und 3 DNGs aus DxO
    PureRAW / DeepPRIME 3):
 
+   Farbrauschen wird auf **halber Auflösung** gemessen (×2 zurückgerechnet): JPEGs speichern
+   Farbe nur in halber Auflösung (4:2:0), auf dem feinsten Raster ist dort nie Farbrauschen
+   messbar. Gemessen an 5 unbearbeiteten RAWs, 3 DxO-DNGs und 6 JPEGs eines Pixel 8 Pro:
+
    | Herkunft | Luma-σ | Chroma-σ | Chroma/Luma |
    |---|---|---|---|
-   | unbearbeitete Canon-RAWs (LibRaw) | 1,0–5,2 | 0,7–2,9 | 0,5–0,7 |
-   | DxO DeepPRIME 3 | 0,3–5,7 | 0,05–0,16 | 0,03–0,15 |
+   | unbearbeitete Canon-RAWs (LibRaw) | 1,0–5,2 | 1,8–8,9 | 1,7–1,9 |
+   | dieselben RAWs als JPEG 4:2:0, Q92 | 0,7–5,7 | 0,45–4,45 | 0,5–0,9 |
+   | DxO DeepPRIME 3 | 0,3–5,7 | 0,07–0,33 | 0,05–0,43 |
+   | Pixel 8 Pro, Tageslicht-JPEG | 0,0–3,5¹ | 0,00 | 0 |
 
-   - **Bereits entrauscht:** Chroma-σ < 0,3 und Chroma/Luma < 0,25 → Regler startet auf 0,
+   ¹ Die Pixel-Fotos haben keine glatten Flächen; Luma misst dort Putz- und Steinstruktur.
+   In wirklich ruhigen Blöcken hat Handy-Software plus JPEG jedes feine Detail entfernt.
+
+   - **Bereits entrauscht:** Chroma-σ < 0,6 und Chroma/Luma < 0,6 → Regler startet auf 0,
      Hinweis „Bild ist bereits entrauscht“. Ein KI-Entrauscher entfernt Farbrauschen fast
      vollständig, lässt aber oft bewusst feines Helligkeitskorn stehen (ein DxO-Bild hat
      Luma-σ 5,7 bei Chroma 0,16). Das Korn ist gewollt und wird nicht weggerechnet.

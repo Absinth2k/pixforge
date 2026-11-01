@@ -8,6 +8,11 @@ chroma are measured separately because camera/phone noise differs a lot between 
 and because images that were already denoised (e.g. by DxO PureRAW or a phone ISP)
 typically show almost no chroma noise.
 
+Chroma is measured one octave lower: JPEGs store colour at half resolution (4:2:0), so the
+finest HH band of a decoded JPEG holds no chroma noise at all. Averaging 2x2 pixels halves
+white noise, so the half-resolution estimate is multiplied by 2; for full-resolution chroma
+this gives the same value as the fine-scale measurement.
+
 All sigmas are reported in 8-bit units (0..255) for readability.
 """
 
@@ -99,10 +104,19 @@ def estimate_noise(
     thresh = np.quantile(act[valid], flat_quantile)
     sel = valid & (act <= thresh)
 
-    sig = [_block_sigmas(_haar_hh(ycc[..., c]), block)[: act.size] for c in range(3)]
-    luma = float(np.median(sig[0][sel]))
-    chroma = float(np.median(np.concatenate([sig[1][sel], sig[2][sel]])))
+    luma_sig = _block_sigmas(_haar_hh(ycc[..., 0]), block)[: act.size]
+    chroma_sig = [
+        _block_sigmas(_haar_hh(_half(ycc[..., c])), block // 2)[: act.size] * 2.0
+        for c in (1, 2)
+    ]
+    luma = float(np.median(luma_sig[sel]))
+    chroma = float(np.median(np.concatenate([chroma_sig[0][sel], chroma_sig[1][sel]])))
     return NoiseEstimate(luma, chroma, float(sel.mean()), colorful)
+
+
+def _half(ch: np.ndarray) -> np.ndarray:
+    h, w = ch.shape
+    return ch[: h - h % 2, : w - w % 2].reshape(h // 2, 2, w // 2, 2).mean(axis=(1, 3))
 
 
 def _block_mean(y: np.ndarray, block: int) -> np.ndarray:

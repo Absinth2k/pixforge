@@ -12,9 +12,11 @@ from pixforge.denoise.estimate import NoiseEstimate
 
 #: below this luma sigma (8-bit units) an image counts as clean
 CLEAN_LUMA = 1.5
-#: an AI-denoised image has almost no colour noise left, even if grain was kept
-DENOISED_CHROMA = 0.3
-DENOISED_RATIO = 0.25
+#: an AI- or phone-denoised image has almost no colour noise left, even if grain was kept.
+#: Measured at half resolution: unprocessed RAWs 1.8-8.9 (ratio >= 1.7), DxO 0.07-0.33
+#: (ratio <= 0.43), Pixel 8 Pro JPEGs 0.0.
+DENOISED_CHROMA = 0.6
+DENOISED_RATIO = 0.6
 #: luma noise (8-bit sigma) that may remain after mixing; more than ~1.5 is amplified into
 #: worm-like texture by the upscaler (measured, docs/backend.md section 4)
 RESIDUAL_TARGET = 0.8
