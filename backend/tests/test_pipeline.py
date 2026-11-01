@@ -182,3 +182,80 @@ def test_denoise_suggestions() -> None:
     # Black-and-white scan: no colour noise by nature, must not count as "already denoised".
     bw = suggest(NoiseEstimate(4.0, 0.05, 0.3, colorfulness=0.3), upscale_model="clean-x4")
     assert bw.reason == "noisy"
+
+
+def test_denoise_only_keeps_size_and_skips_upscaler() -> None:
+    p = _pipe()
+    img = _image(96, 128)
+    res = p.process(
+        img,
+        Settings(
+            task="denoise",
+            denoise=DenoiseSettings(mode="on", strength=60),
+            faces=FaceSettings(enabled=False),
+        ),
+    )
+    assert res.image.size == (128, 96)
+    assert res.factor == 1.0 and res.model == "denoise"
+    assert "photo" not in p.fakes  # type: ignore[attr-defined]
+    assert p.fakes["denoise"].calls  # type: ignore[attr-defined]
+
+
+def test_denoise_only_on_clean_image_says_nothing_to_do() -> None:
+    img = ImageData(rgb=np.full((64, 64, 3), 0.5, np.float32))
+    res = _pipe().process(img, Settings(task="denoise", faces=FaceSettings(enabled=False)))
+    assert res.denoise_strength == 0
+    assert any("nichts zu tun" in w for w in res.warnings)
+    np.testing.assert_allclose(res.image.rgb, img.rgb, atol=1e-6)
+
+
+def test_crop_matches_full_image_region() -> None:
+    img = _image(300, 400)
+    s = dict(
+        scale=2, denoise=DenoiseSettings(mode="off"), faces=FaceSettings(enabled=False), tile=128
+    )
+    full = _pipe().process(img, Settings(**s)).image.rgb
+    x, y, w, h = 150, 90, 120, 100
+    crop = _pipe().process(img, Settings(crop=(x, y, w, h), **s))
+    assert crop.image.size == (w * 2, h * 2)
+    assert crop.image.meta["pixforge"]["crop"] == [x, y, w, h]
+    np.testing.assert_allclose(
+        crop.image.rgb, full[y * 2 : (y + h) * 2, x * 2 : (x + w) * 2], atol=1e-3
+    )
+
+
+def test_crop_at_image_corner_and_factor_from_width() -> None:
+    img = _image(200, 200)
+    res = _pipe().process(
+        img,
+        Settings(
+            crop=(0, 150, 80, 50),
+            target_width=320,
+            denoise=DenoiseSettings(mode="off"),
+            faces=FaceSettings(enabled=False),
+        ),
+    )
+    assert res.image.size == (320, 200) and res.factor == 4.0
+
+
+def test_crop_keeps_only_faces_inside_and_shifts_them() -> None:
+    inside = Face((110, 110, 40, 40), FFHQ_512 / 12.8 + np.array([110, 110], np.float32), 0.9)
+    outside = Face((10, 10, 40, 40), FFHQ_512 / 12.8 + np.array([10, 10], np.float32), 0.9)
+
+    class TwoFaces:
+        def detect(self, rgb: np.ndarray, min_size: float = 0) -> list[Face]:
+            return [inside, outside]
+
+    img = _image(300, 300)
+    img.rgb[:] = 0.0
+    res = _pipe(faces=TwoFaces()).process(
+        img,
+        Settings(
+            crop=(100, 100, 100, 100),
+            scale=2,
+            denoise=DenoiseSettings(mode="off"),
+            faces=FaceSettings(enabled=True, strength=100),
+        ),
+    )
+    assert res.faces_restored == 1
+    assert res.image.rgb[60, 60].mean() > 0.9  # face area inside the crop got restored

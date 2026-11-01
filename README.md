@@ -73,4 +73,5 @@ docs/      Messungen, Design
 
 ## Lizenz
 
-Code: Apache-2.0. Modelle und Bibliotheken von Dritten: siehe [`THIRD_PARTY.md`](THIRD_PARTY.md).
+© 2026 Andre Strahl. Code: Apache-2.0 (siehe [`LICENSE`](LICENSE) und [`NOTICE`](NOTICE)).
+Modelle und Bibliotheken von Dritten: siehe [`THIRD_PARTY.md`](THIRD_PARTY.md).

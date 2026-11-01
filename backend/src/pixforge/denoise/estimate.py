@@ -106,8 +106,7 @@ def estimate_noise(
 
     luma_sig = _block_sigmas(_haar_hh(ycc[..., 0]), block)[: act.size]
     chroma_sig = [
-        _block_sigmas(_haar_hh(_half(ycc[..., c])), block // 2)[: act.size] * 2.0
-        for c in (1, 2)
+        _block_sigmas(_haar_hh(_half(ycc[..., c])), block // 2)[: act.size] * 2.0 for c in (1, 2)
     ]
     luma = float(np.median(luma_sig[sel]))
     chroma = float(np.median(np.concatenate([chroma_sig[0][sel], chroma_sig[1][sel]])))

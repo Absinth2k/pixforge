@@ -25,6 +25,16 @@ def _parse_denoise(v: str) -> tuple[str, float | None]:
         raise argparse.ArgumentTypeError("auto, off, on oder 0-100") from None
 
 
+def _parse_crop(v: str) -> tuple[int, int, int, int]:
+    try:
+        x, y, w, h = (int(float(p)) for p in v.replace(" ", "").split(","))
+    except ValueError:
+        raise argparse.ArgumentTypeError("Format: X,Y,BREITE,HÖHE in Pixeln") from None
+    if w <= 0 or h <= 0:
+        raise argparse.ArgumentTypeError("Breite und Höhe müssen positiv sein")
+    return x, y, w, h
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="pixforge",
@@ -39,7 +49,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="photo, photo-sharp, clean, max (oder genaue ID, siehe --list-models)",
     )
     size = ap.add_argument_group("Größe")
-    size.add_argument("--scale", type=float, default=4.0, help="Faktor, z. B. 2, 4, 6 (Standard 4)")
+    size.add_argument(
+        "--denoise-only",
+        action="store_true",
+        help="nur entrauschen, Größe bleibt (schnell, ohne Hochskalier-Modell)",
+    )
+    size.add_argument(
+        "--crop",
+        type=_parse_crop,
+        metavar="X,Y,B,H",
+        help="nur diesen Ausschnitt (Pixel im Original) als neues Bild",
+    )
+    size.add_argument(
+        "--scale",
+        type=float,
+        default=4.0,
+        help="Faktor, z. B. 2, 4, 6; 1 = KI-Schärfen ohne Vergrößern (so langsam wie 4)",
+    )
     size.add_argument("--width", type=int, help="Zielbreite in Pixeln")
     size.add_argument("--height", type=int, help="Zielhöhe in Pixeln")
     adj = ap.add_argument_group("Einstellungen (0-100)")
@@ -71,7 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--compression", default="lzw", choices=["lzw", "zip", "none"])
     ex.add_argument("--srgb", action="store_true", help="nach sRGB umrechnen statt Profil behalten")
     ex.add_argument(
-        "--pattern", default="{name}_pixforge", help="Dateiname: {name} {scale} {model} {w} {h}"
+        "--pattern",
+        default=None,
+        help="Dateiname: {name} {scale} {model} {w} {h} (Standard {name}_pixforge, "
+        "bei --crop {name}_pixforge_ausschnitt)",
     )
     ex.add_argument("--exists", default="rename", choices=["rename", "overwrite", "skip"])
     ex.add_argument("--no-exif", action="store_true")
@@ -142,7 +171,10 @@ def main(argv: list[str] | None = None) -> int:
     from pixforge.core.tiling import Cancelled
 
     mode, strength = args.denoise
+    pattern = args.pattern or ("{name}_pixforge_ausschnitt" if args.crop else "{name}_pixforge")
     settings = Settings(
+        task="denoise" if args.denoise_only else "upscale",
+        crop=args.crop,
         model=MODEL_ALIASES.get(args.model, args.model),
         scale=args.scale,
         target_width=args.width,
@@ -176,6 +208,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"\r{_prefix}  {stage:8} {frac * 100:5.1f} %{eta}      ", end="", flush=True)
 
             res = pipe.process(img, settings, progress=progress)
+            nothing_done = (
+                res.model == "denoise"
+                and res.denoise_strength == 0
+                and not res.faces_restored
+                and not (settings.jpeg_strength or settings.sharpen or settings.grain)
+            )
+            if nothing_done:
+                print()
+                for w in res.warnings:
+                    print(f"  Hinweis: {w}")
+                print(f"  nicht gespeichert, das Bild bliebe unverändert: {src.name}")
+                continue
             fmt = args.format
             bits = args.bits or (16 if img.bit_depth > 8 and fmt in ("png", "tiff") else 8)
             opts = ExportOptions(
@@ -190,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
             out = naming.output_path(
                 src,
                 args.output,
-                args.pattern,
+                pattern,
                 FORMAT_EXT[fmt],
                 res.factor,
                 res.model,
@@ -203,7 +247,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  übersprungen (Datei existiert): {src.name}")
                 continue
             save_image(res.image, out, opts)
-            info = [f"{W}x{H}", res.model, f"{_fmt_time(res.seconds)}", res.device]
+            info = [f"{W}x{H}", res.model, f"{_fmt_time(res.seconds)}"]
+            if res.device:
+                info.append(res.device)
             if res.denoise_strength:
                 info.append(f"entrauscht {res.denoise_strength:.0f}")
             elif res.analysis.denoise.reason != "noisy":

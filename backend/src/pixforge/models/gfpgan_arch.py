@@ -32,10 +32,7 @@ def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
     """Initialisation is irrelevant for inference: weights come from the checkpoint."""
 
 
-
-
 class NormStyleCode(nn.Module):
-
     def forward(self, x):
         """Normalize the style codes.
 
@@ -63,14 +60,16 @@ class ModulatedConv2d(nn.Module):
         eps (float): A value added to the denominator for numerical stability. Default: 1e-8.
     """
 
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 num_style_feat,
-                 demodulate=True,
-                 sample_mode=None,
-                 eps=1e-8):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        num_style_feat,
+        demodulate=True,
+        sample_mode=None,
+        eps=1e-8,
+    ):
         super(ModulatedConv2d, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -82,11 +81,14 @@ class ModulatedConv2d(nn.Module):
         # modulation inside each modulated conv
         self.modulation = nn.Linear(num_style_feat, in_channels, bias=True)
         # initialization
-        default_init_weights(self.modulation, scale=1, bias_fill=1, a=0, mode='fan_in', nonlinearity='linear')
+        default_init_weights(
+            self.modulation, scale=1, bias_fill=1, a=0, mode="fan_in", nonlinearity="linear"
+        )
 
         self.weight = nn.Parameter(
-            torch.randn(1, out_channels, in_channels, kernel_size, kernel_size) /
-            math.sqrt(in_channels * kernel_size**2))
+            torch.randn(1, out_channels, in_channels, kernel_size, kernel_size)
+            / math.sqrt(in_channels * kernel_size**2)
+        )
         self.padding = kernel_size // 2
 
     def forward(self, x, style):
@@ -112,10 +114,10 @@ class ModulatedConv2d(nn.Module):
         weight = weight.view(b * self.out_channels, c, self.kernel_size, self.kernel_size)
 
         # upsample or downsample if necessary
-        if self.sample_mode == 'upsample':
-            x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
-        elif self.sample_mode == 'downsample':
-            x = F.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
+        if self.sample_mode == "upsample":
+            x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
+        elif self.sample_mode == "downsample":
+            x = F.interpolate(x, scale_factor=0.5, mode="bilinear", align_corners=False)
 
         b, c, h, w = x.shape
         x = x.view(1, b * c, h, w)
@@ -126,8 +128,10 @@ class ModulatedConv2d(nn.Module):
         return out
 
     def __repr__(self):
-        return (f'{self.__class__.__name__}(in_channels={self.in_channels}, out_channels={self.out_channels}, '
-                f'kernel_size={self.kernel_size}, demodulate={self.demodulate}, sample_mode={self.sample_mode})')
+        return (
+            f"{self.__class__.__name__}(in_channels={self.in_channels}, out_channels={self.out_channels}, "
+            f"kernel_size={self.kernel_size}, demodulate={self.demodulate}, sample_mode={self.sample_mode})"
+        )
 
 
 class StyleConv(nn.Module):
@@ -142,10 +146,24 @@ class StyleConv(nn.Module):
         sample_mode (str | None): Indicating 'upsample', 'downsample' or None. Default: None.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, num_style_feat, demodulate=True, sample_mode=None):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        num_style_feat,
+        demodulate=True,
+        sample_mode=None,
+    ):
         super(StyleConv, self).__init__()
         self.modulated_conv = ModulatedConv2d(
-            in_channels, out_channels, kernel_size, num_style_feat, demodulate=demodulate, sample_mode=sample_mode)
+            in_channels,
+            out_channels,
+            kernel_size,
+            num_style_feat,
+            demodulate=demodulate,
+            sample_mode=sample_mode,
+        )
         self.weight = nn.Parameter(torch.zeros(1))  # for noise injection
         self.bias = nn.Parameter(torch.zeros(1, out_channels, 1, 1))
         self.activate = nn.LeakyReLU(negative_slope=0.2, inplace=True)
@@ -178,7 +196,13 @@ class ToRGB(nn.Module):
         super(ToRGB, self).__init__()
         self.upsample = upsample
         self.modulated_conv = ModulatedConv2d(
-            in_channels, 3, kernel_size=1, num_style_feat=num_style_feat, demodulate=False, sample_mode=None)
+            in_channels,
+            3,
+            kernel_size=1,
+            num_style_feat=num_style_feat,
+            demodulate=False,
+            sample_mode=None,
+        )
         self.bias = nn.Parameter(torch.zeros(1, 3, 1, 1))
 
     def forward(self, x, style, skip=None):
@@ -196,7 +220,7 @@ class ToRGB(nn.Module):
         out = out + self.bias
         if skip is not None:
             if self.upsample:
-                skip = F.interpolate(skip, scale_factor=2, mode='bilinear', align_corners=False)
+                skip = F.interpolate(skip, scale_factor=2, mode="bilinear", align_corners=False)
             out = out + skip
         return out
 
@@ -237,35 +261,41 @@ class StyleGAN2GeneratorClean(nn.Module):
         style_mlp_layers = [NormStyleCode()]
         for i in range(num_mlp):
             style_mlp_layers.extend(
-                [nn.Linear(num_style_feat, num_style_feat, bias=True),
-                 nn.LeakyReLU(negative_slope=0.2, inplace=True)])
+                [
+                    nn.Linear(num_style_feat, num_style_feat, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                ]
+            )
         self.style_mlp = nn.Sequential(*style_mlp_layers)
         # initialization
-        default_init_weights(self.style_mlp, scale=1, bias_fill=0, a=0.2, mode='fan_in', nonlinearity='leaky_relu')
+        default_init_weights(
+            self.style_mlp, scale=1, bias_fill=0, a=0.2, mode="fan_in", nonlinearity="leaky_relu"
+        )
 
         # channel list
         channels = {
-            '4': int(512 * narrow),
-            '8': int(512 * narrow),
-            '16': int(512 * narrow),
-            '32': int(512 * narrow),
-            '64': int(256 * channel_multiplier * narrow),
-            '128': int(128 * channel_multiplier * narrow),
-            '256': int(64 * channel_multiplier * narrow),
-            '512': int(32 * channel_multiplier * narrow),
-            '1024': int(16 * channel_multiplier * narrow)
+            "4": int(512 * narrow),
+            "8": int(512 * narrow),
+            "16": int(512 * narrow),
+            "32": int(512 * narrow),
+            "64": int(256 * channel_multiplier * narrow),
+            "128": int(128 * channel_multiplier * narrow),
+            "256": int(64 * channel_multiplier * narrow),
+            "512": int(32 * channel_multiplier * narrow),
+            "1024": int(16 * channel_multiplier * narrow),
         }
         self.channels = channels
 
-        self.constant_input = ConstantInput(channels['4'], size=4)
+        self.constant_input = ConstantInput(channels["4"], size=4)
         self.style_conv1 = StyleConv(
-            channels['4'],
-            channels['4'],
+            channels["4"],
+            channels["4"],
             kernel_size=3,
             num_style_feat=num_style_feat,
             demodulate=True,
-            sample_mode=None)
-        self.to_rgb1 = ToRGB(channels['4'], num_style_feat, upsample=False)
+            sample_mode=None,
+        )
+        self.to_rgb1 = ToRGB(channels["4"], num_style_feat, upsample=False)
 
         self.log_size = int(math.log(out_size, 2))
         self.num_layers = (self.log_size - 2) * 2 + 1
@@ -275,15 +305,15 @@ class StyleGAN2GeneratorClean(nn.Module):
         self.to_rgbs = nn.ModuleList()
         self.noises = nn.Module()
 
-        in_channels = channels['4']
+        in_channels = channels["4"]
         # noise
         for layer_idx in range(self.num_layers):
-            resolution = 2**((layer_idx + 5) // 2)
+            resolution = 2 ** ((layer_idx + 5) // 2)
             shape = [1, 1, resolution, resolution]
-            self.noises.register_buffer(f'noise{layer_idx}', torch.randn(*shape))
+            self.noises.register_buffer(f"noise{layer_idx}", torch.randn(*shape))
         # style convs and to_rgbs
         for i in range(3, self.log_size + 1):
-            out_channels = channels[f'{2**i}']
+            out_channels = channels[f"{2**i}"]
             self.style_convs.append(
                 StyleConv(
                     in_channels,
@@ -291,7 +321,9 @@ class StyleGAN2GeneratorClean(nn.Module):
                     kernel_size=3,
                     num_style_feat=num_style_feat,
                     demodulate=True,
-                    sample_mode='upsample'))
+                    sample_mode="upsample",
+                )
+            )
             self.style_convs.append(
                 StyleConv(
                     out_channels,
@@ -299,7 +331,9 @@ class StyleGAN2GeneratorClean(nn.Module):
                     kernel_size=3,
                     num_style_feat=num_style_feat,
                     demodulate=True,
-                    sample_mode=None))
+                    sample_mode=None,
+                )
+            )
             self.to_rgbs.append(ToRGB(out_channels, num_style_feat, upsample=True))
             in_channels = out_channels
 
@@ -318,19 +352,23 @@ class StyleGAN2GeneratorClean(nn.Module):
         return self.style_mlp(x)
 
     def mean_latent(self, num_latent):
-        latent_in = torch.randn(num_latent, self.num_style_feat, device=self.constant_input.weight.device)
+        latent_in = torch.randn(
+            num_latent, self.num_style_feat, device=self.constant_input.weight.device
+        )
         latent = self.style_mlp(latent_in).mean(0, keepdim=True)
         return latent
 
-    def forward(self,
-                styles,
-                input_is_latent=False,
-                noise=None,
-                randomize_noise=True,
-                truncation=1,
-                truncation_latent=None,
-                inject_index=None,
-                return_latents=False):
+    def forward(
+        self,
+        styles,
+        input_is_latent=False,
+        noise=None,
+        randomize_noise=True,
+        truncation=1,
+        truncation_latent=None,
+        inject_index=None,
+        return_latents=False,
+    ):
         """Forward function for StyleGAN2GeneratorClean.
 
         Args:
@@ -351,12 +389,14 @@ class StyleGAN2GeneratorClean(nn.Module):
             if randomize_noise:
                 noise = [None] * self.num_layers  # for each style conv layer
             else:  # use the stored noise
-                noise = [getattr(self.noises, f'noise{i}') for i in range(self.num_layers)]
+                noise = [getattr(self.noises, f"noise{i}") for i in range(self.num_layers)]
         # style truncation
         if truncation < 1:
             style_truncation = []
             for style in styles:
-                style_truncation.append(truncation_latent + truncation * (style - truncation_latent))
+                style_truncation.append(
+                    truncation_latent + truncation * (style - truncation_latent)
+                )
             styles = style_truncation
         # get style latents with injection
         if len(styles) == 1:
@@ -380,8 +420,9 @@ class StyleGAN2GeneratorClean(nn.Module):
         skip = self.to_rgb1(out, latent[:, 1])
 
         i = 1
-        for conv1, conv2, noise1, noise2, to_rgb in zip(self.style_convs[::2], self.style_convs[1::2], noise[1::2],
-                                                        noise[2::2], self.to_rgbs):
+        for conv1, conv2, noise1, noise2, to_rgb in zip(
+            self.style_convs[::2], self.style_convs[1::2], noise[1::2], noise[2::2], self.to_rgbs
+        ):
             out = conv1(out, latent[:, i], noise=noise1)
             out = conv2(out, latent[:, i + 1], noise=noise2)
             skip = to_rgb(out, latent[:, i + 2], skip)  # feature back to the rgb space
@@ -393,7 +434,6 @@ class StyleGAN2GeneratorClean(nn.Module):
             return image, latent
         else:
             return image, None
-
 
 
 class StyleGAN2GeneratorCSFT(StyleGAN2GeneratorClean):
@@ -410,25 +450,36 @@ class StyleGAN2GeneratorCSFT(StyleGAN2GeneratorClean):
         sft_half (bool): Whether to apply SFT on half of the input channels. Default: False.
     """
 
-    def __init__(self, out_size, num_style_feat=512, num_mlp=8, channel_multiplier=2, narrow=1, sft_half=False):
+    def __init__(
+        self,
+        out_size,
+        num_style_feat=512,
+        num_mlp=8,
+        channel_multiplier=2,
+        narrow=1,
+        sft_half=False,
+    ):
         super(StyleGAN2GeneratorCSFT, self).__init__(
             out_size,
             num_style_feat=num_style_feat,
             num_mlp=num_mlp,
             channel_multiplier=channel_multiplier,
-            narrow=narrow)
+            narrow=narrow,
+        )
         self.sft_half = sft_half
 
-    def forward(self,
-                styles,
-                conditions,
-                input_is_latent=False,
-                noise=None,
-                randomize_noise=True,
-                truncation=1,
-                truncation_latent=None,
-                inject_index=None,
-                return_latents=False):
+    def forward(
+        self,
+        styles,
+        conditions,
+        input_is_latent=False,
+        noise=None,
+        randomize_noise=True,
+        truncation=1,
+        truncation_latent=None,
+        inject_index=None,
+        return_latents=False,
+    ):
         """Forward function for StyleGAN2GeneratorCSFT.
 
         Args:
@@ -450,12 +501,14 @@ class StyleGAN2GeneratorCSFT(StyleGAN2GeneratorClean):
             if randomize_noise:
                 noise = [None] * self.num_layers  # for each style conv layer
             else:  # use the stored noise
-                noise = [getattr(self.noises, f'noise{i}') for i in range(self.num_layers)]
+                noise = [getattr(self.noises, f"noise{i}") for i in range(self.num_layers)]
         # style truncation
         if truncation < 1:
             style_truncation = []
             for style in styles:
-                style_truncation.append(truncation_latent + truncation * (style - truncation_latent))
+                style_truncation.append(
+                    truncation_latent + truncation * (style - truncation_latent)
+                )
             styles = style_truncation
         # get style latents with injection
         if len(styles) == 1:
@@ -479,8 +532,9 @@ class StyleGAN2GeneratorCSFT(StyleGAN2GeneratorClean):
         skip = self.to_rgb1(out, latent[:, 1])
 
         i = 1
-        for conv1, conv2, noise1, noise2, to_rgb in zip(self.style_convs[::2], self.style_convs[1::2], noise[1::2],
-                                                        noise[2::2], self.to_rgbs):
+        for conv1, conv2, noise1, noise2, to_rgb in zip(
+            self.style_convs[::2], self.style_convs[1::2], noise[1::2], noise[2::2], self.to_rgbs
+        ):
             out = conv1(out, latent[:, i], noise=noise1)
 
             # the conditions may have fewer levels
@@ -514,24 +568,26 @@ class ResBlock(nn.Module):
         mode (str): Upsampling/downsampling mode. Options: down | up. Default: down.
     """
 
-    def __init__(self, in_channels, out_channels, mode='down'):
+    def __init__(self, in_channels, out_channels, mode="down"):
         super(ResBlock, self).__init__()
 
         self.conv1 = nn.Conv2d(in_channels, in_channels, 3, 1, 1)
         self.conv2 = nn.Conv2d(in_channels, out_channels, 3, 1, 1)
         self.skip = nn.Conv2d(in_channels, out_channels, 1, bias=False)
-        if mode == 'down':
+        if mode == "down":
             self.scale_factor = 0.5
-        elif mode == 'up':
+        elif mode == "up":
             self.scale_factor = 2
 
     def forward(self, x):
         out = F.leaky_relu_(self.conv1(x), negative_slope=0.2)
         # upsample/downsample
-        out = F.interpolate(out, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
+        out = F.interpolate(
+            out, scale_factor=self.scale_factor, mode="bilinear", align_corners=False
+        )
         out = F.leaky_relu_(self.conv2(out), negative_slope=0.2)
         # skip
-        x = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
+        x = F.interpolate(x, scale_factor=self.scale_factor, mode="bilinear", align_corners=False)
         skip = self.skip(x)
         out = out + skip
         return out
@@ -560,18 +616,19 @@ class GFPGANv1Clean(nn.Module):
     """
 
     def __init__(
-            self,
-            out_size,
-            num_style_feat=512,
-            channel_multiplier=1,
-            decoder_load_path=None,
-            fix_decoder=True,
-            # for stylegan decoder
-            num_mlp=8,
-            input_is_latent=False,
-            different_w=False,
-            narrow=1,
-            sft_half=False):
+        self,
+        out_size,
+        num_style_feat=512,
+        channel_multiplier=1,
+        decoder_load_path=None,
+        fix_decoder=True,
+        # for stylegan decoder
+        num_mlp=8,
+        input_is_latent=False,
+        different_w=False,
+        narrow=1,
+        sft_half=False,
+    ):
 
         super(GFPGANv1Clean, self).__init__()
         self.input_is_latent = input_is_latent
@@ -580,51 +637,51 @@ class GFPGANv1Clean(nn.Module):
 
         unet_narrow = narrow * 0.5  # by default, use a half of input channels
         channels = {
-            '4': int(512 * unet_narrow),
-            '8': int(512 * unet_narrow),
-            '16': int(512 * unet_narrow),
-            '32': int(512 * unet_narrow),
-            '64': int(256 * channel_multiplier * unet_narrow),
-            '128': int(128 * channel_multiplier * unet_narrow),
-            '256': int(64 * channel_multiplier * unet_narrow),
-            '512': int(32 * channel_multiplier * unet_narrow),
-            '1024': int(16 * channel_multiplier * unet_narrow)
+            "4": int(512 * unet_narrow),
+            "8": int(512 * unet_narrow),
+            "16": int(512 * unet_narrow),
+            "32": int(512 * unet_narrow),
+            "64": int(256 * channel_multiplier * unet_narrow),
+            "128": int(128 * channel_multiplier * unet_narrow),
+            "256": int(64 * channel_multiplier * unet_narrow),
+            "512": int(32 * channel_multiplier * unet_narrow),
+            "1024": int(16 * channel_multiplier * unet_narrow),
         }
 
         self.log_size = int(math.log(out_size, 2))
-        first_out_size = 2**(int(math.log(out_size, 2)))
+        first_out_size = 2 ** (int(math.log(out_size, 2)))
 
-        self.conv_body_first = nn.Conv2d(3, channels[f'{first_out_size}'], 1)
+        self.conv_body_first = nn.Conv2d(3, channels[f"{first_out_size}"], 1)
 
         # downsample
-        in_channels = channels[f'{first_out_size}']
+        in_channels = channels[f"{first_out_size}"]
         self.conv_body_down = nn.ModuleList()
         for i in range(self.log_size, 2, -1):
-            out_channels = channels[f'{2**(i - 1)}']
-            self.conv_body_down.append(ResBlock(in_channels, out_channels, mode='down'))
+            out_channels = channels[f"{2 ** (i - 1)}"]
+            self.conv_body_down.append(ResBlock(in_channels, out_channels, mode="down"))
             in_channels = out_channels
 
-        self.final_conv = nn.Conv2d(in_channels, channels['4'], 3, 1, 1)
+        self.final_conv = nn.Conv2d(in_channels, channels["4"], 3, 1, 1)
 
         # upsample
-        in_channels = channels['4']
+        in_channels = channels["4"]
         self.conv_body_up = nn.ModuleList()
         for i in range(3, self.log_size + 1):
-            out_channels = channels[f'{2**i}']
-            self.conv_body_up.append(ResBlock(in_channels, out_channels, mode='up'))
+            out_channels = channels[f"{2**i}"]
+            self.conv_body_up.append(ResBlock(in_channels, out_channels, mode="up"))
             in_channels = out_channels
 
         # to RGB
         self.toRGB = nn.ModuleList()
         for i in range(3, self.log_size + 1):
-            self.toRGB.append(nn.Conv2d(channels[f'{2**i}'], 3, 1))
+            self.toRGB.append(nn.Conv2d(channels[f"{2**i}"], 3, 1))
 
         if different_w:
             linear_out_channel = (int(math.log(out_size, 2)) * 2 - 2) * num_style_feat
         else:
             linear_out_channel = num_style_feat
 
-        self.final_linear = nn.Linear(channels['4'] * 4 * 4, linear_out_channel)
+        self.final_linear = nn.Linear(channels["4"] * 4 * 4, linear_out_channel)
 
         # the decoder: stylegan2 generator with SFT modulations
         self.stylegan_decoder = StyleGAN2GeneratorCSFT(
@@ -633,12 +690,16 @@ class GFPGANv1Clean(nn.Module):
             num_mlp=num_mlp,
             channel_multiplier=channel_multiplier,
             narrow=narrow,
-            sft_half=sft_half)
+            sft_half=sft_half,
+        )
 
         # load pre-trained stylegan2 model if necessary
         if decoder_load_path:
             self.stylegan_decoder.load_state_dict(
-                torch.load(decoder_load_path, map_location=lambda storage, loc: storage)['params_ema'])
+                torch.load(decoder_load_path, map_location=lambda storage, loc: storage)[
+                    "params_ema"
+                ]
+            )
         # fix decoder without updating params
         if fix_decoder:
             for _, param in self.stylegan_decoder.named_parameters():
@@ -648,19 +709,25 @@ class GFPGANv1Clean(nn.Module):
         self.condition_scale = nn.ModuleList()
         self.condition_shift = nn.ModuleList()
         for i in range(3, self.log_size + 1):
-            out_channels = channels[f'{2**i}']
+            out_channels = channels[f"{2**i}"]
             if sft_half:
                 sft_out_channels = out_channels
             else:
                 sft_out_channels = out_channels * 2
             self.condition_scale.append(
                 nn.Sequential(
-                    nn.Conv2d(out_channels, out_channels, 3, 1, 1), nn.LeakyReLU(0.2, True),
-                    nn.Conv2d(out_channels, sft_out_channels, 3, 1, 1)))
+                    nn.Conv2d(out_channels, out_channels, 3, 1, 1),
+                    nn.LeakyReLU(0.2, True),
+                    nn.Conv2d(out_channels, sft_out_channels, 3, 1, 1),
+                )
+            )
             self.condition_shift.append(
                 nn.Sequential(
-                    nn.Conv2d(out_channels, out_channels, 3, 1, 1), nn.LeakyReLU(0.2, True),
-                    nn.Conv2d(out_channels, sft_out_channels, 3, 1, 1)))
+                    nn.Conv2d(out_channels, out_channels, 3, 1, 1),
+                    nn.LeakyReLU(0.2, True),
+                    nn.Conv2d(out_channels, sft_out_channels, 3, 1, 1),
+                )
+            )
 
     def forward(self, x, return_latents=False, return_rgb=True, randomize_noise=True, **kwargs):
         """Forward function for GFPGANv1Clean.
@@ -703,10 +770,12 @@ class GFPGANv1Clean(nn.Module):
                 out_rgbs.append(self.toRGB[i](feat))
 
         # decoder
-        image, _ = self.stylegan_decoder([style_code],
-                                         conditions,
-                                         return_latents=return_latents,
-                                         input_is_latent=self.input_is_latent,
-                                         randomize_noise=randomize_noise)
+        image, _ = self.stylegan_decoder(
+            [style_code],
+            conditions,
+            return_latents=return_latents,
+            input_is_latent=self.input_is_latent,
+            randomize_noise=randomize_noise,
+        )
 
         return image, out_rgbs

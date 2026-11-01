@@ -36,6 +36,10 @@ BackendFactory = Callable[[str], InferenceBackend]
 
 TILE_SIZES = (384, 256, 192, 128)
 MAX_FACTOR = 16.0
+#: real image context (source px) processed around a crop and cut away afterwards
+CROP_MARGIN = 32
+#: SCUNet seconds per MP (GPU measured, CPU estimated)
+DENOISE_S_PER_MP = {"gpu": 0.4, "cpu": 10.0}
 # Measured on an RX 9070 XT / Core Ultra 9 285K (docs/backend.md), seconds per input MP.
 SPEED_S_PER_MP = {
     ("gpu", "HAT"): 10.0,
@@ -66,6 +70,8 @@ class FaceSettings:
 
 @dataclass
 class Settings:
+    #: "upscale" (default) or "denoise" (same size, noise reduction only, no upscaling model)
+    task: str = "upscale"
     model: str = "photo"
     scale: float = 4.0
     target_width: int | None = None
@@ -79,6 +85,8 @@ class Settings:
     tile: int | None = None  # None = from device memory
     overlap: int = 32
     keep_intermediates: bool = False
+    #: (x, y, width, height) in source pixels: process only this region as a new image
+    crop: tuple[int, int, int, int] | None = None
 
 
 @dataclass
@@ -107,7 +115,12 @@ class Result:
 
 # ----------------------------------------------------------------------------- helpers
 def target_size(w: int, h: int, s: Settings) -> tuple[int, int, float]:
-    """Output size and effective factor from scale or target width/height."""
+    """Output size and effective factor from scale or target width/height.
+
+    ``w``/``h`` are the size of the processed region (the crop, if one is set).
+    """
+    if s.task == "denoise":
+        return w, h, 1.0
     if s.target_width and s.target_height:
         f = min(s.target_width / w, s.target_height / h)
     elif s.target_width:
@@ -183,10 +196,14 @@ def auto_tile(backend: InferenceBackend) -> int:
 
 def estimate_seconds(w: int, h: int, settings: Settings, device_kind: str) -> float:
     """Rough processing time for the UI (upscale dominates)."""
+    if settings.crop:
+        w, h = settings.crop[2], settings.crop[3]
+    mp = w * h / 1e6
+    if settings.task == "denoise":
+        return mp * DENOISE_S_PER_MP[device_kind]
     _, _, f = target_size(w, h, settings)
     arch = "HAT-L" if settings.model.startswith("max") else "HAT"
     per_mp = SPEED_S_PER_MP[(device_kind, arch)]
-    mp = w * h / 1e6
     passes = 1.0 if f <= 4 else 1.0 + (f / 4) ** 2
     t = mp * per_mp * passes
     if settings.denoise.mode != "off":
@@ -237,7 +254,9 @@ class Pipeline:
     ) -> Analysis:
         settings = settings or Settings()
         noise = estimate_noise(img.rgb)
-        sug = suggest(noise, img.meta, settings.model)
+        # In denoise-only mode no photo model runs that could remove noise by itself.
+        model = "clean" if settings.task == "denoise" else settings.model
+        sug = suggest(noise, img.meta, model)
         faces: list[Face] = []
         if detect_faces:
             try:
@@ -257,10 +276,13 @@ class Pipeline:
         analysis: Analysis | None = None,
     ) -> Result:
         s = settings or Settings()
+        if s.crop is not None:
+            return self._process_crop(img, s, progress, cancel, analysis)
         t_start = time.perf_counter()
         h, w = img.rgb.shape[:2]
         W, H, factor = target_size(w, h, s)
-        model_id = resolve_model(s.model, factor)
+        denoise_only = s.task == "denoise"
+        model_id = "denoise" if denoise_only else resolve_model(s.model, factor)
         warnings: list[str] = []
         timings: dict[str, float] = {}
         inter: dict[str, np.ndarray] = {}
@@ -277,11 +299,15 @@ class Pipeline:
         faces = self._select_faces(an.faces, s.faces)
         want_faces = bool(faces) and s.faces.enabled is not False
         den_strength = self._denoise_strength(s, an)
+        if denoise_only and den_strength == 0 and s.denoise.mode != "off":
+            warnings.append(
+                f"{an.denoise.message()}: an der Rauschminderung gibt es nichts zu tun."
+            )
 
         stages = [
             ("jpeg", 0.08 if s.jpeg_strength > 0 else 0.0),
             ("denoise", 0.08 if den_strength > 0 else 0.0),
-            ("upscale", 0.76 if factor <= 4 else 0.86),
+            ("upscale", 0.0 if denoise_only else 0.76 if factor <= 4 else 0.86),
             ("faces", 0.06 if want_faces else 0.0),
             ("finish", 0.02),
         ]
@@ -325,26 +351,19 @@ class Pipeline:
 
         # 3. Upscale
         t = time.perf_counter()
-        b = self.backend(model_id)
-        native = b.scale
-        if factor <= native + 1e-6:
-            up = self._tiled(b, rgb, s, lambda d, n: report("upscale", d / n), cancel, warnings)
+        device_name = ""
+        if denoise_only:
+            up = np.array(rgb, dtype=np.float32, copy=True)
+            if den_strength > 0:
+                device_name = self.backend(s.denoise.model).device_info().name
         else:
-            mid_w, mid_h = round(W / native), round(H / native)
-            first = self._tiled(
-                b, rgb, s, lambda d, n: report("upscale", 0.2 * d / n), cancel, warnings
-            )
-            first = pp.resize(first, mid_w, mid_h)
-            up = self._tiled(
-                b, first, s, lambda d, n: report("upscale", 0.2 + 0.8 * d / n), cancel, warnings
-            )
-            del first
-        up = pp.resize(up, W, H)
+            up = self._upscale(rgb, s, model_id, factor, W, H, report, cancel, warnings)
+            device_name = self.backend(model_id).device_info().name
         timings["upscale"] = time.perf_counter() - t
         check_cancel()
 
         # 4. Detail mix with a plain Lanczos upscale
-        if s.detail_mix > 0:
+        if s.detail_mix > 0 and not denoise_only:
             up = pp.detail_mix(up, pp.resize(rgb, W, H), s.detail_mix)
 
         # 5. Faces
@@ -366,6 +385,7 @@ class Pipeline:
                 up, scaled, s.faces.strength, progress=lambda d, n: report("faces", d / n)
             )
             restored = len(scaled)
+            device_name = device_name or self.backend(s.faces.model).device_info().name
             timings["faces"] = time.perf_counter() - t
         check_cancel()
 
@@ -392,7 +412,7 @@ class Pipeline:
             an,
             model_id,
             factor,
-            b.device_info().name,
+            device_name,
             time.perf_counter() - t_start,
             timings,
             warnings,
@@ -402,12 +422,88 @@ class Pipeline:
         )
 
     # -- steps -------------------------------------------------------------------------
+    def _upscale(
+        self,
+        rgb: np.ndarray,
+        s: Settings,
+        model_id: str,
+        factor: float,
+        W: int,
+        H: int,
+        report: Callable[..., None],
+        cancel: Callable[[], bool] | None,
+        warnings: list[str],
+    ) -> np.ndarray:
+        b = self.backend(model_id)
+        native = b.scale
+        if factor <= native + 1e-6:
+            up = self._tiled(b, rgb, s, lambda d, n: report("upscale", d / n), cancel, warnings)
+        else:
+            mid_w, mid_h = round(W / native), round(H / native)
+            first = self._tiled(
+                b, rgb, s, lambda d, n: report("upscale", 0.2 * d / n), cancel, warnings
+            )
+            first = pp.resize(first, mid_w, mid_h)
+            up = self._tiled(
+                b, first, s, lambda d, n: report("upscale", 0.2 + 0.8 * d / n), cancel, warnings
+            )
+            del first
+        return pp.resize(up, W, H)
+
+    def _process_crop(
+        self,
+        img: ImageData,
+        s: Settings,
+        progress: ProgressFn | None,
+        cancel: Callable[[], bool] | None,
+        analysis: Analysis | None,
+    ) -> Result:
+        """Process only ``s.crop`` plus CROP_MARGIN of real context, cut away afterwards."""
+        H0, W0 = img.rgb.shape[:2]
+        x, y, cw, ch = (int(round(v)) for v in s.crop)  # type: ignore[union-attr]
+        x, y = max(0, min(x, W0 - 1)), max(0, min(y, H0 - 1))
+        cw, ch = max(1, min(cw, W0 - x)), max(1, min(ch, H0 - y))
+        ml, mt = min(CROP_MARGIN, x), min(CROP_MARGIN, y)
+        mr, mb = min(CROP_MARGIN, W0 - x - cw), min(CROP_MARGIN, H0 - y - ch)
+        X0, Y0 = x - ml, y - mt
+        region = (slice(Y0, y + ch + mb), slice(X0, x + cw + mr))
+        sub_alpha = None if img.alpha is None else np.ascontiguousarray(img.alpha[region])
+        sub_img = replace(img, rgb=np.ascontiguousarray(img.rgb[region]), alpha=sub_alpha)
+        W, H, factor = target_size(cw, ch, replace(s, crop=None))
+        an_full = analysis or self.analyze(img, s, detect_faces=s.faces.enabled is not False)
+        off = np.array([X0, Y0], np.float32)
+        faces = []
+        for f in an_full.faces:  # faces centred inside the crop, in region coordinates
+            fx, fy = f.box[0] + f.box[2] / 2, f.box[1] + f.box[3] / 2
+            if x <= fx < x + cw and y <= fy < y + ch:
+                box = (f.box[0] - X0, f.box[1] - Y0, f.box[2], f.box[3])
+                faces.append(Face(box, f.landmarks - off, f.score))
+        sh, sw = sub_img.rgb.shape[:2]
+        an = Analysis(an_full.noise, an_full.denoise, faces, sw, sh)
+        inner = replace(s, crop=None, scale=factor, target_width=None, target_height=None)
+        res = self.process(sub_img, inner, progress, cancel, an)
+        L, T = round(ml * factor), round(mt * factor)
+
+        def cut(a: np.ndarray) -> np.ndarray:
+            a = np.ascontiguousarray(a[T : T + H, L : L + W])
+            return pp.resize(a, W, H) if a.shape[:2] != (H, W) else a
+
+        meta = dict(res.image.meta)
+        meta["pixforge"] = dict(meta.get("pixforge", {}), crop=[x, y, cw, ch])
+        alpha = None if res.image.alpha is None else cut(res.image.alpha)
+        res.image = replace(res.image, rgb=cut(res.image.rgb), alpha=alpha, meta=meta)
+        res.analysis = an_full
+        return res
+
     def _denoise_strength(self, s: Settings, an: Analysis) -> float:
         mode = s.denoise.mode
         if mode == "off":
             return 0.0
         if s.denoise.strength is not None:
             return float(np.clip(s.denoise.strength, 0, 100))
+        if s.task == "denoise" and an.denoise.reason == "model_handles":
+            # the analysis was made for a photo model, but none runs in denoise-only mode
+            return float(suggest(an.noise, None, "clean").strength)
         if mode == "on" and an.denoise.strength == 0:
             if an.denoise.reason == "model_handles":  # user overrides the photo-model default
                 return float(suggest(an.noise, None, "clean").strength)
