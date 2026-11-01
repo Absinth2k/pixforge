@@ -21,7 +21,7 @@ backend/build/
 backend/dist/
 
 # Models and weights (never commit)
-models/
+/models/
 *.pth
 *.pt
 *.onnx
