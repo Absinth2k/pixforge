@@ -37,3 +37,6 @@ testdata/private/
 Thumbs.db
 .vscode/
 .idea/
+
+# Upstream weights downloaded for conversion
+weights/
