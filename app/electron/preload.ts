@@ -30,7 +30,8 @@ const bridge: PixforgeBridge = {
   pathForFile: (file) => webUtils.getPathForFile(file),
   showInFolder: (path) => ipcRenderer.send('shell:show-item', path),
   openLogs: () => ipcRenderer.send('shell:open-logs'),
-  onOpenFiles: (cb) => subscribe('app:open-files', cb)
+  onOpenFiles: (cb) => subscribe('app:open-files', cb),
+  takePendingFiles: () => ipcRenderer.invoke('app:take-pending-files')
 }
 
 contextBridge.exposeInMainWorld('pixforge', bridge)

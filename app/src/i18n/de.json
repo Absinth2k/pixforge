@@ -1,5 +1,8 @@
 {
-  "app": { "name": "Pixforge", "copyright": "© 2026 Andre Strahl" },
+  "app": {
+    "name": "Pixforge",
+    "copyright": "© 2026 Andre Strahl"
+  },
   "window": {
     "minimize": "Minimieren",
     "maximize": "Maximieren",
@@ -102,5 +105,17 @@
     "restart": "Neu starten",
     "logs": "Protokolle öffnen",
     "load": "Konnte nicht geöffnet werden: {{name}}"
+  },
+  "crop": {
+    "button": "Ausschnitt",
+    "done": "Fertig",
+    "remove": "Aufheben",
+    "edit": "Bearbeiten",
+    "free": "Frei",
+    "original": "Original",
+    "orientation": "Hoch/Quer drehen",
+    "aspect": "Seitenverhältnis",
+    "label": "Ausschnitt {{w}} × {{h}} px → {{ow}} × {{oh}} px",
+    "card": "Nur der Ausschnitt {{w}} × {{h}} px wird gerechnet und als neues Bild gespeichert (…_ausschnitt)."
   }
 }

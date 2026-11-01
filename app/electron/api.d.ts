@@ -28,6 +28,8 @@ export interface PixforgeBridge {
   showInFolder(path: string): void
   openLogs(): void
   onOpenFiles(cb: (paths: string[]) => void): () => void
+  /** Files passed on the command line ("Open with"), handed out once. */
+  takePendingFiles(): Promise<string[]>
 }
 
 declare global {

@@ -36,9 +36,11 @@ interface State {
   stage: Stage
   split: number
   showFaces: boolean
+  cropEditing: boolean
   view: Record<string, ViewState>
   theme: ThemeName
   toast: { text: string; path?: string; kind: 'info' | 'error' } | null
+  pendingPaths: string[]
 
   connect(): Promise<void>
   addPaths(paths: string[]): Promise<void>
@@ -78,9 +80,11 @@ export const useStore = create<State>((set, get) => ({
   stage: 'result',
   split: 50,
   showFaces: true,
+  cropEditing: false,
   view: {},
   theme: storedTheme(),
   toast: null,
+  pendingPaths: [],
 
   async connect() {
     const info = await window.pixforge.getBackend()
@@ -94,6 +98,9 @@ export const useStore = create<State>((set, get) => ({
     const byId: Record<string, Job> = {}
     for (const j of jobs.jobs) byId[j.id] = j
     set({ health, models, jobs: byId, queuePaused: jobs.paused })
+    const queued = [...get().pendingPaths, ...(await window.pixforge.takePendingFiles())]
+    set({ pendingPaths: [] })
+    if (queued.length) void get().addPaths(queued)
     api.events((ev) => {
       if (ev.type === 'job') {
         const job = ev as unknown as Job
@@ -111,7 +118,12 @@ export const useStore = create<State>((set, get) => ({
 
   async addPaths(paths) {
     const api = get().api
-    if (!api || !paths.length) return
+    if (!paths.length) return
+    if (!api) {
+      // backend not ready yet: keep them, connect() loads them afterwards
+      set((s) => ({ pendingPaths: [...s.pendingPaths, ...paths] }))
+      return
+    }
     const known = new Set(get().images.map((i) => i.path.toLowerCase()))
     const fresh = paths.filter((p) => !known.has(p.toLowerCase()))
     if (!fresh.length) return
@@ -147,7 +159,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   select(id) {
-    set({ selectedId: id })
+    set({ selectedId: id, cropEditing: false })
   },
 
   updateSettings(id, fn) {

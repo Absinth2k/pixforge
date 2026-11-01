@@ -1,4 +1,4 @@
-import { Download, FolderOpen, FolderPlus, Moon, Sun } from 'lucide-react'
+import { Crop, Download, FolderOpen, FolderPlus, Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore, type ViewMode } from '@/state/store'
 import { Segmented } from './ui'
@@ -23,6 +23,25 @@ export function Toolbar({
   const set = useStore((s) => s.set)
   const setTheme = useStore((s) => s.setTheme)
   const exportImages = useStore((s) => s.exportImages)
+  const cropEditing = useStore((s) => s.cropEditing)
+  const crop = useStore((s) => (s.selectedId ? s.settings[s.selectedId]?.crop : null))
+  const updateSettings = useStore((s) => s.updateSettings)
+  const image = useStore((s) => s.images.find((i) => i.id === s.selectedId))
+
+  const toggleCrop = () => {
+    if (!image) return
+    if (cropEditing) return set({ cropEditing: false })
+    if (!crop) {
+      // start with the centre 70 % of the image
+      const w = Math.round(image.width * 0.7)
+      const h = Math.round(image.height * 0.7)
+      updateSettings(image.id, (s) => {
+        s.crop = [Math.round((image.width - w) / 2), Math.round((image.height - h) / 2), w, h]
+        return s
+      })
+    }
+    set({ cropEditing: true })
+  }
 
   const iconBtn =
     'grid h-8 w-8 shrink-0 place-items-center rounded-btn border border-line bg-raised text-text2 transition-colors duration-100 hover:bg-hover hover:text-text'
@@ -45,6 +64,21 @@ export function Toolbar({
           <FolderPlus size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
+      <button
+        type="button"
+        disabled={!image}
+        aria-pressed={cropEditing || !!crop}
+        onClick={toggleCrop}
+        title="C"
+        className={
+          cropEditing || crop
+            ? 'flex h-8 items-center gap-[7px] rounded-btn border border-accent-line bg-accent-soft px-3 font-medium text-accent-ink disabled:opacity-40'
+            : secondary
+        }
+      >
+        <Crop size={16} strokeWidth={1.75} aria-hidden="true" />
+        {t('crop.button')}
+      </button>
       <div className="h-[22px] w-px bg-line" />
       <Segmented<ViewMode>
         label={t('toolbar.view')}

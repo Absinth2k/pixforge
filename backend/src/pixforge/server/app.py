@@ -116,6 +116,8 @@ class PreviewIn(BaseModel):
     out_w: int = Field(gt=0, le=8192)
     out_h: int = Field(gt=0, le=8192)
     stage: Literal["original", "denoised", "result"] = "result"
+    #: independent request streams: a newer request cancels older ones of the same channel
+    channel: Literal["view", "base"] = "view"
 
 
 class AddImagesIn(BaseModel):
@@ -390,8 +392,9 @@ def create_app(
 
     @app.post("/api/preview", dependencies=dep)
     async def preview(body: PreviewIn) -> Response:
-        gen = preview_gen.get(body.image_id, 0) + 1
-        preview_gen[body.image_id] = gen  # newer request for this image cancels older ones
+        key = f"{body.image_id}:{body.channel}"
+        gen = preview_gen.get(key, 0) + 1
+        preview_gen[key] = gen  # a newer request on this channel cancels older ones
         img, an = await run_in_threadpool(store.image, body.image_id)
         settings = body.settings.to_settings()
         region = pv.Region(**body.region.model_dump())
@@ -407,7 +410,7 @@ def create_app(
                     body.out_w,
                     body.out_h,
                     body.stage,
-                    cancel=lambda: preview_gen.get(body.image_id) != gen,
+                    cancel=lambda: preview_gen.get(key) != gen,
                 )
 
         t = time.perf_counter()

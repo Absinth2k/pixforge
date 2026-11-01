@@ -85,12 +85,6 @@ function createWindow(): void {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  win.webContents.on('did-finish-load', () => {
-    if (pendingFiles.length) {
-      win?.webContents.send('app:open-files', pendingFiles)
-      pendingFiles = []
-    }
-  })
   if (DEV_URL) void win.loadURL(DEV_URL)
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
 }
@@ -139,11 +133,21 @@ function registerIpc(): void {
     return res.canceled ? [] : expandPaths(res.filePaths)
   })
   ipcMain.handle('fs:expand', (_e, paths: string[]) => expandPaths(paths))
+  ipcMain.handle('app:take-pending-files', () => {
+    const files = pendingFiles
+    pendingFiles = []
+    return files
+  })
   ipcMain.on('shell:show-item', (_e, path: string) => shell.showItemInFolder(path))
   ipcMain.on('shell:open-logs', () => {
     void shell.openPath(join(app.getPath('home'), 'AppData', 'Local', 'Pixforge', 'logs'))
   })
 }
+
+// Tests run with their own profile, so they never hand their files to a running Pixforge
+// (the single-instance lock is tied to the userData folder).
+if (process.env['PIXFORGE_E2E_PROFILE'])
+  app.setPath('userData', process.env['PIXFORGE_E2E_PROFILE'])
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()

@@ -46,7 +46,11 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
     args: ['.'],
     cwd: APP_DIR,
-    env: { ...process.env, LANG: 'de_DE' }
+    env: {
+      ...process.env,
+      LANG: 'de_DE',
+      PIXFORGE_E2E_PROFILE: mkdtempSync(join(tmpdir(), 'pixforge-profile-'))
+    }
   })
   const page = await app.firstWindow()
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -81,6 +85,33 @@ test('start screen, load an image, preview renders', async () => {
   }
 })
 
+test('smooth wheel zoom and crop tool', async () => {
+  const { app, page } = await launch()
+  try {
+    await openFiles(app, [syntheticImage()])
+    await expect(page.locator('img[alt^="Pixforge"]')).toBeVisible()
+    const viewer = page.locator('img[alt="Original"]').first()
+    const box = (await viewer.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -120)
+    await page.waitForTimeout(300)
+    await expect(page.getByTestId('zoom-readout')).toHaveText(/^\d+ %$/) // left "fit" mode
+    for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 240)
+    await expect(page.getByTestId('zoom-readout')).toHaveText(/^Einpassen · \d+ %$/) // snapped back
+
+    await page.keyboard.press('c')
+    await expect(page.getByRole('button', { name: 'Fertig' })).toBeVisible()
+    await expect(page.getByText('Ausschnitt 336 × 224 px → 1.344 × 896 px').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Fertig' }).click()
+    await expect(page.getByText(/Nur der Ausschnitt 336 × 224 px wird gerechnet/)).toBeVisible()
+    await expect(page.getByText('1.344 × 896')).toBeVisible() // estimate uses the crop
+    await page.getByRole('button', { name: 'Aufheben' }).click()
+    await expect(page.getByText('1.920 × 1.280')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
 test('screenshots for the README', async () => {
   const shot = process.env.PIXFORGE_SHOT_IMAGE
   test.skip(!shot, 'set PIXFORGE_SHOT_IMAGE to an image path')
@@ -106,6 +137,12 @@ test('screenshots for the README', async () => {
     await expect(page.getByText(/Vorschau wird berechnet/)).toBeHidden({ timeout: 90_000 })
     await page.waitForTimeout(400)
     await page.screenshot({ path: join(outDir, 'main-100.png') })
+    await page.keyboard.press('0')
+    await page.keyboard.press('c')
+    await page.getByRole('button', { name: '3:2' }).click()
+    await expect(page.getByText(/Vorschau wird berechnet/)).toBeHidden({ timeout: 90_000 })
+    await page.waitForTimeout(700)
+    await page.screenshot({ path: join(outDir, 'crop.png') })
   } finally {
     await app.close()
   }

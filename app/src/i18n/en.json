@@ -1,5 +1,8 @@
 {
-  "app": { "name": "Pixforge", "copyright": "© 2026 Andre Strahl" },
+  "app": {
+    "name": "Pixforge",
+    "copyright": "© 2026 Andre Strahl"
+  },
   "window": {
     "minimize": "Minimize",
     "maximize": "Maximize",
@@ -102,5 +105,17 @@
     "restart": "Restart",
     "logs": "Open logs",
     "load": "Could not open: {{name}}"
+  },
+  "crop": {
+    "button": "Crop",
+    "done": "Done",
+    "remove": "Remove",
+    "edit": "Edit",
+    "free": "Free",
+    "original": "Original",
+    "orientation": "Rotate portrait/landscape",
+    "aspect": "Aspect ratio",
+    "label": "Crop {{w}} × {{h}} px → {{ow}} × {{oh}} px",
+    "card": "Only the {{w}} × {{h}} px crop is processed and saved as a new image (…_crop)."
   }
 }

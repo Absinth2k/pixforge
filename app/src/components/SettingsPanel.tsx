@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, MoveRight, RotateCcw } from 'lucide-react'
+import { Check, Crop, MoveRight, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Estimate, ImageInfo, Settings } from '@/api/types'
 import { useStore } from '@/state/store'
@@ -245,7 +245,7 @@ export function SettingsPanel({ img }: { img: ImageInfo }) {
         )}
         <div className="mt-3 flex items-baseline justify-between gap-2">
           <span className="text-[12px] text-text3">
-            {nf(img.width, lang)} × {nf(img.height, lang)}
+            {nf(est?.in_w ?? img.width, lang)} × {nf(est?.in_h ?? img.height, lang)}
           </span>
           <MoveRight size={16} className="text-text3" aria-hidden="true" />
           <span className="text-[14px] font-semibold">
@@ -265,6 +265,36 @@ export function SettingsPanel({ img }: { img: ImageInfo }) {
         {est?.warnings.map((w) => (
           <Note key={w}>{w}</Note>
         ))}
+        {settings.crop && (
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-line bg-raised px-2.5 py-[9px] text-[12px]">
+            <Crop size={15} className="shrink-0 text-text2" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-text2">
+              {t('crop.card', {
+                w: nf(settings.crop[2], lang),
+                h: nf(settings.crop[3], lang)
+              })}
+            </span>
+            <div className="flex shrink-0 flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setAll({ cropEditing: true })}
+                className="h-[26px] rounded-btn border border-line px-2 text-[12px] text-text hover:bg-hover"
+              >
+                {t('crop.edit')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  set((s) => void (s.crop = null))
+                  setAll({ cropEditing: false })
+                }}
+                className="h-[26px] rounded-btn border border-line px-2 text-[12px] text-text hover:bg-hover"
+              >
+                {t('crop.remove')}
+              </button>
+            </div>
+          </div>
+        )}
       </Section>
 
       <section className="border-b border-line px-[18px] py-[14px]">

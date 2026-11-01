@@ -75,7 +75,19 @@ export default function App() {
         else if (e.key === '1') zoomTo(1)
         else if (e.key === '2') zoomTo(2)
         else if (e.key.toLowerCase() === 'f') st.set({ showFaces: !st.showFaces })
-        else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        else if (e.key === 'Escape' && st.cropEditing) st.set({ cropEditing: false })
+        else if (e.key.toLowerCase() === 'c' && st.selectedId) {
+          const image = st.images.find((i) => i.id === st.selectedId)
+          if (image && !st.settings[image.id]?.crop) {
+            const w = Math.round(image.width * 0.7)
+            const h = Math.round(image.height * 0.7)
+            st.updateSettings(image.id, (s) => {
+              s.crop = [Math.round((image.width - w) / 2), Math.round((image.height - h) / 2), w, h]
+              return s
+            })
+          }
+          st.set({ cropEditing: !st.cropEditing })
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
           const idx = st.images.findIndex((i) => i.id === st.selectedId)
           const next = st.images[idx + (e.key === 'ArrowRight' ? 1 : -1)]
           if (next) st.select(next.id)

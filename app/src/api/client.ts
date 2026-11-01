@@ -85,13 +85,22 @@ export class Api {
     outW: number,
     outH: number,
     stage: Stage,
-    signal?: AbortSignal
-  ): Promise<{ url: string; ms: number } | null> {
+    signal?: AbortSignal,
+    channel: 'view' | 'base' = 'view'
+  ): Promise<{ blob: Blob; ms: number } | null> {
     const res = await fetch(this.base + '/api/preview', {
       method: 'POST',
       signal,
       headers: { 'X-Pixforge-Token': this.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_id: imageId, settings, region, out_w: outW, out_h: outH, stage })
+      body: JSON.stringify({
+        image_id: imageId,
+        settings,
+        region,
+        out_w: outW,
+        out_h: outH,
+        stage,
+        channel
+      })
     })
     if (res.status === 204) return null
     if (!res.ok) {
@@ -103,8 +112,7 @@ export class Api {
       }
       throw new ApiError(res.status, msg)
     }
-    const blob = await res.blob()
-    return { url: URL.createObjectURL(blob), ms: Number(res.headers.get('X-Preview-Ms') ?? 0) }
+    return { blob: await res.blob(), ms: Number(res.headers.get('X-Preview-Ms') ?? 0) }
   }
 
   /** WebSocket with automatic reconnect. Returns a function that closes it. */
