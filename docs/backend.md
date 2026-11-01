@@ -158,10 +158,22 @@ und Detail-Erhalt (Laplace-Energie im Verhältnis zum Original, auf halber Aufl�
 
 1. **SCUNet ist das Standardmodell.** NAFNet fliegt raus. Als Alternative mit mehr Textur
    prüfe ich in Etappe 2 die GAN-Variante von SCUNet (gleiche Lizenz, gleiche Größe).
-2. **Schwelle:** Unter Luma-σ ≈ 1,5 entrauscht Pixforge nicht, der Regler zeigt dann „kein
-   Rauschen erkannt“. Das deckt auch Andres Arbeitsweise ab: Fotos, die vorher in DxO
-   PureRAW entrauscht wurden, liegen deutlich darunter und werden nicht doppelt bearbeitet.
-   Die Schwelle wird in Etappe 2 an solchen Dateien kalibriert.
+2. **Automatik in drei Fällen** (kalibriert an 5 unbearbeiteten RAWs und 3 DNGs aus DxO
+   PureRAW / DeepPRIME 3):
+
+   | Herkunft | Luma-σ | Chroma-σ | Chroma/Luma |
+   |---|---|---|---|
+   | unbearbeitete Canon-RAWs (LibRaw) | 1,0–5,2 | 0,7–2,9 | 0,5–0,7 |
+   | DxO DeepPRIME 3 | 0,3–5,7 | 0,05–0,16 | 0,03–0,15 |
+
+   - **Bereits entrauscht:** Chroma-σ < 0,3 und Chroma/Luma < 0,25 → Regler startet auf 0,
+     Hinweis „Bild ist bereits entrauscht“. Ein KI-Entrauscher entfernt Farbrauschen fast
+     vollständig, lässt aber oft bewusst feines Helligkeitskorn stehen (ein DxO-Bild hat
+     Luma-σ 5,7 bei Chroma 0,16). Das Korn ist gewollt und wird nicht weggerechnet.
+   - **Kein Rauschen:** Luma-σ < 1,5 → Regler auf 0, Hinweis „kein Rauschen erkannt“.
+   - **Sonst:** Startwert aus Luma-σ, frei überschreibbar.
+   Damit werden Andres DxO-Fotos nicht doppelt entrauscht. Der Regler bleibt in allen Fällen
+   bedienbar, und die Vorschau zeigt „Original / nur entrauscht / Endergebnis“.
 3. **Stärke als Mischung** Original ↔ SCUNet, Startwert aus der Messung, dazu eine Kantenmaske
    für den Detailschutz (in glatten Flächen stärker, an Kanten und Textur schwächer).
 4. **Real-HAT-GAN entrauscht selbst leicht**, die Automatik dort zurücknehmen (wie geplant).
