@@ -40,3 +40,6 @@ Thumbs.db
 
 # Upstream weights downloaded for conversion
 weights/
+
+# Private test photos (DxO PureRAW output) - never commit
+/dxo/
