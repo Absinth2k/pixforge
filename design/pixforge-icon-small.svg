@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pixforge">
+  <title>Pixforge (unter 48 px: ohne Funke, größere Scheibe)</title>
+  <rect width="64" height="64" rx="12" fill="#141416"/>
+  <path d="M32 8H24V12H16V20H12V44H16V52H24V56H32A24 24 0 0 0 32 8Z" fill="#F2A541"/>
+</svg>
