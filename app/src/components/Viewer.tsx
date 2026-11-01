@@ -101,8 +101,8 @@ function visibleRegion(img: ImageInfo, g: Geometry): Region {
   return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) }
 }
 
-function outSize(r: Region, s: number, cap = MAX_OUT): [number, number] {
-  const dpr = window.devicePixelRatio || 1
+function outSize(r: Region, s: number, cap = MAX_OUT, useDpr = true): [number, number] {
+  const dpr = useDpr ? window.devicePixelRatio || 1 : 1
   let ow = r.w * s * dpr
   let oh = r.h * s * dpr
   const k = Math.min(1, cap / Math.max(ow, oh))
@@ -156,6 +156,7 @@ export function Viewer({
   const set = useStore((s) => s.set)
   const updateSettings = useStore((s) => s.updateSettings)
   const cropEditing = useStore((s) => s.cropEditing)
+  const loadingModel = useStore((s) => s.loadingModel)
   const [aspectKey, setAspectKey] = useState('free')
   const [portrait, setPortrait] = useState(false)
 
@@ -286,7 +287,9 @@ export function Viewer({
   }, [api, img.id, visibleKey, vw, vh])
 
   const regionKey = keyOf(region)
-  const [ow, oh] = region ? outSize(region, target.s) : [1, 1]
+  // Zoomed out the processed image is shown smaller than its pixels anyway: request CSS
+  // pixels only (a 1.5x HiDPI screen would otherwise cost 2.25x the GPU time).
+  const [ow, oh] = region ? outSize(region, target.s, MAX_OUT, target.z >= 1) : [1, 1]
 
   // Processed result for the visible region: debounced, cancellable, stale-while-loading.
   const effectiveStage: Stage = viewMode === 'single' || stage !== 'original' ? stage : 'result'
@@ -707,7 +710,7 @@ export function Viewer({
         />
       </div>
       <div className="absolute right-3 bottom-3 z-20 flex items-center gap-2">
-        {(busy || error) && (
+        {(busy || error || loadingModel) && (
           <span
             role="status"
             className={`flex items-center gap-2 rounded-btn border px-2.5 py-1.5 text-[12px] backdrop-blur ${
@@ -719,7 +722,11 @@ export function Viewer({
             {!error && (
               <span className="pf-spin inline-block h-3 w-3 rounded-full border-2 border-[#F2A541] border-t-transparent" />
             )}
-            {error ? t('preview.error', { msg: error }) : t('preview.computing')}
+            {error
+              ? t('preview.error', { msg: error })
+              : loadingModel
+                ? t('preview.loadingModel')
+                : t('preview.computing')}
           </span>
         )}
         {img.faces.length > 0 && (

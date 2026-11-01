@@ -15,10 +15,13 @@ import numpy as np
 
 from pixforge.core import postprocess as pp
 from pixforge.core.io import ImageData
-from pixforge.core.pipeline import CROP_MARGIN, Analysis, Pipeline, Settings, target_size
+from pixforge.core.pipeline import Analysis, Pipeline, Settings, target_size
 from pixforge.faces.detect import Face
 
 STAGES = ("original", "denoised", "result")
+#: real context around the visible region (export uses 32 px; 16 is enough on screen and
+#: keeps a typical 100 % view inside a single tile)
+PREVIEW_MARGIN = 16
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,16 @@ class Region:
         x1 = int(max(x0 + 1, min(width, np.ceil(self.x + self.w))))
         y1 = int(max(y0 + 1, min(height, np.ceil(self.y + self.h))))
         return x0, y0, x1 - x0, y1 - y0
+
+
+def _native_scale(model_id: str, factor: float) -> int:
+    from pixforge.core.pipeline import resolve_model
+    from pixforge.models import registry
+
+    try:
+        return registry.get(resolve_model(model_id, factor)).scale
+    except KeyError:
+        return max(1, round(factor))
 
 
 def view_original(img: ImageData, region: Region, out_w: int, out_h: int) -> np.ndarray:
@@ -73,7 +86,14 @@ def render(
     _, _, factor = target_size(W0, H0, s)
     # Source scale so that the output of the region matches the screen (never above 1).
     s_src = min(1.0, out_w / (rw * factor), out_h / (rh * factor))
-    m = CROP_MARGIN
+    if s_src < 1.0 and s.task == "upscale":
+        # Zoomed out: run the model once at its native scale on a source downsampled so that
+        # its output matches the screen. Running 4x and shrinking to 2x (or two passes for 6x)
+        # would cost up to 4x more for pixels nobody can see at this zoom.
+        native = _native_scale(s.model, factor)
+        s_src = min(1.0, out_w / (rw * native), out_h / (rh * native))
+        factor = float(native)
+    m = PREVIEW_MARGIN
     ml, mt = min(m, x), min(m, y)
     mr, mb = min(m, W0 - x - rw), min(m, H0 - y - rh)
     X0, Y0 = x - ml, y - mt

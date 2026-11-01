@@ -41,6 +41,7 @@ interface State {
   theme: ThemeName
   toast: { text: string; path?: string; kind: 'info' | 'error' } | null
   pendingPaths: string[]
+  loadingModel: string | null
 
   connect(): Promise<void>
   addPaths(paths: string[]): Promise<void>
@@ -85,6 +86,7 @@ export const useStore = create<State>((set, get) => ({
   theme: storedTheme(),
   toast: null,
   pendingPaths: [],
+  loadingModel: null,
 
   async connect() {
     const info = await window.pixforge.getBackend()
@@ -110,6 +112,8 @@ export const useStore = create<State>((set, get) => ({
         } else if (job.status === 'error') {
           set({ toast: { text: `${job.name}: ${job.error}`, kind: 'error' } })
         }
+      } else if (ev.type === 'model') {
+        set({ loadingModel: ev.loading ? String(ev.id) : null })
       } else if (ev.type === 'queue' && typeof ev.paused === 'boolean') {
         set({ queuePaused: ev.paused })
       }

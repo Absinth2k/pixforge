@@ -36,8 +36,18 @@ def test_constant_tile_shape() -> None:
 
 def test_small_image_uses_small_aligned_tile() -> None:
     p = plan(40, 70, tile=256, overlap=32, align=16)
-    assert (p.tile_h, p.tile_w) == (48, 80)
+    assert (p.tile_h, p.tile_w) == (64, 128)  # smallest buckets that fit, one tile
     assert p.count == 1
+    # a preview region just above 384 px fits one 448x320 tile instead of two 384x384 tiles
+    p = plan(280, 402, tile=384, overlap=32, align=16)
+    assert (p.tile_h, p.tile_w, p.count) == (320, 448, 1)
+    # tile shapes stay within a small set and never exceed the VRAM budget of tile x tile
+    for h in range(20, 900, 23):
+        for w in range(20, 900, 29):
+            q = plan(h, w, 384, 32, 16)
+            assert q.tile_h in (64, 128, 192, 256, 320, 384, 448, 512)
+            assert q.tile_w in (64, 128, 192, 256, 320, 384, 448, 512)
+            assert q.tile_h * q.tile_w <= 384 * 384
 
 
 def test_positions_cover_axis() -> None:

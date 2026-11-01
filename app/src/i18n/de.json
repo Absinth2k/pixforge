@@ -39,7 +39,8 @@
     "computing": "Vorschau wird berechnet …",
     "divider": "Vorher/Nachher-Trenner",
     "error": "Vorschau fehlgeschlagen: {{msg}}",
-    "facesHint": "Klick auf einen Rahmen schließt das Gesicht aus"
+    "facesHint": "Klick auf einen Rahmen schließt das Gesicht aus",
+    "loadingModel": "Modell wird geladen …"
   },
   "panel": {
     "title": "Einstellungen",

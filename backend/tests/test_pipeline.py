@@ -259,3 +259,23 @@ def test_crop_keeps_only_faces_inside_and_shifts_them() -> None:
     )
     assert res.faces_restored == 1
     assert res.image.rgb[60, 60].mean() > 0.9  # face area inside the crop got restored
+
+
+def test_photo_model_does_not_denoise_with_a_cached_clean_analysis() -> None:
+    """The server caches an analysis made for 'clean'; a photo model must not denoise."""
+    from pixforge.core.pipeline import Analysis
+
+    p = _pipe()
+    img = _image()
+    noise = NoiseEstimate(5.0, 2.8, 0.3)
+    cached = Analysis(noise, suggest(noise, {}, "clean"), [], 128, 96)
+    assert cached.denoise.strength > 0
+    res = p.process(
+        img, Settings(model="photo", scale=2, faces=FaceSettings(enabled=False)), analysis=cached
+    )
+    assert res.denoise_strength == 0
+    assert "denoise" not in p.fakes  # type: ignore[attr-defined]
+    res = p.process(
+        img, Settings(model="clean-x4", scale=2, faces=FaceSettings(enabled=False)), analysis=cached
+    )
+    assert res.denoise_strength > 0

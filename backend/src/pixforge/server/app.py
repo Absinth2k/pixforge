@@ -278,6 +278,9 @@ def create_app(
     store = ImageStore(pipeline)
     events = Events()
     queue = JobQueue(pipeline, store.image, events.publish)
+    pipeline.on_model_load = lambda mid, loading: events.publish(
+        {"type": "model", "id": mid, "loading": loading}
+    )
     preview_gen: dict[str, int] = {}
 
     @asynccontextmanager
@@ -421,6 +424,17 @@ def create_app(
         except registry.ModelNotInstalled as exc:
             raise HTTPException(409, str(exc)) from exc
         ms = round((time.perf_counter() - t) * 1000)
+        r = body.region
+        log.info(
+            "preview %s %s region %dx%d -> %dx%d: %d ms",
+            body.channel,
+            body.stage,
+            r.w,
+            r.h,
+            body.out_w,
+            body.out_h,
+            ms,
+        )
         return Response(_jpeg(rgb, 90), media_type="image/jpeg", headers={"X-Preview-Ms": str(ms)})
 
     @app.post("/api/estimate", dependencies=dep)

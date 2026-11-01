@@ -39,7 +39,8 @@
     "computing": "Computing preview …",
     "divider": "Before/after divider",
     "error": "Preview failed: {{msg}}",
-    "facesHint": "Click a frame to exclude that face"
+    "facesHint": "Click a frame to exclude that face",
+    "loadingModel": "Loading model …"
   },
   "panel": {
     "title": "Settings",

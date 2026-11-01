@@ -54,12 +54,36 @@ def axis_positions(length: int, tile: int, overlap: int) -> list[int]:
     return sorted(set(pos))
 
 
+#: Square tile sizes used for images smaller than the regular tile. Every new input shape
+#: makes DirectML compile kernels and keep extra workspace in VRAM; previews of arbitrary
+#: regions would otherwise create dozens of shapes and fill the card (measured: 13 GB).
+TILE_BUCKETS = (64, 128, 192, 256, 320, 384, 448, 512)
+
+
+def _bucket(need: int, align: int) -> int | None:
+    return next((b for b in TILE_BUCKETS if b >= need and b % align == 0), None)
+
+
+def bucket_size(need: int, tile: int, align: int) -> int:
+    b = _bucket(need, align)
+    return b if b is not None and b <= tile else tile
+
+
 def plan(h: int, w: int, tile: int, overlap: int, align: int = 1) -> TilePlan:
-    """Tile layout for an h x w image. Small images get a smaller (aligned) tile."""
+    """Tile layout for an h x w image.
+
+    An image that fits into one tile of at most ``tile * tile`` pixels gets a single
+    (possibly non-square) bucket-sized tile, e.g. 448x320 for a 402x280 preview region:
+    same VRAM as 384x384 but half the work of two square tiles. Larger images use regular
+    square ``tile`` tiles.
+    """
     if tile % align:
         raise ValueError(f"tile {tile} must be a multiple of {align}")
-    th = min(tile, _ceil_to(h, align))
-    tw = min(tile, _ceil_to(w, align))
+    bh, bw = _bucket(_ceil_to(h, align), align), _bucket(_ceil_to(w, align), align)
+    if bh is not None and bw is not None and bh * bw <= tile * tile:
+        th, tw = bh, bw
+    else:
+        th = tw = tile
     ph, pw = max(h, th), max(w, tw)
     ov_h = min(overlap, th // 2)
     ov_w = min(overlap, tw // 2)

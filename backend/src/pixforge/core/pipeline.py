@@ -11,6 +11,7 @@ backend).
 from __future__ import annotations
 
 import ctypes
+import gc
 import logging
 import re
 import time
@@ -114,6 +115,15 @@ class Result:
 
 
 # ----------------------------------------------------------------------------- helpers
+def _model_kind(model_id: str) -> str:
+    from pixforge.models import registry
+
+    try:
+        return registry.get(model_id).kind
+    except KeyError:
+        return model_id  # unknown ids (tests, file paths) are their own kind
+
+
 def target_size(w: int, h: int, s: Settings) -> tuple[int, int, float]:
     """Output size and effective factor from scale or target width/height.
 
@@ -223,6 +233,8 @@ class Pipeline:
         self._factory = backend_factory or self._onnx_backend
         self._backends: dict[str, InferenceBackend] = {}
         self._detector = detector
+        #: called with (model_id, loading) around model loads, e.g. to tell the UI
+        self.on_model_load: Callable[[str, bool], None] | None = None
 
     def _onnx_backend(self, model_id: str) -> InferenceBackend:
         from pixforge.backends.onnx_backend import OnnxBackend
@@ -233,8 +245,21 @@ class Pipeline:
 
     def backend(self, model_id: str) -> InferenceBackend:
         if model_id not in self._backends:
+            # One model per kind (upscale, denoise, face, ...) in VRAM: switching from "photo"
+            # to "max-x4" frees "photo" first instead of stacking models until the card spills.
+            kind = _model_kind(model_id)
+            for other in [m for m in self._backends if _model_kind(m) == kind]:
+                log.info("unloading model %s", other)
+                self._backends.pop(other).close()
+            gc.collect()
             log.info("loading model %s", model_id)
-            self._backends[model_id] = self._factory(model_id)
+            if self.on_model_load:
+                self.on_model_load(model_id, True)
+            try:
+                self._backends[model_id] = self._factory(model_id)
+            finally:
+                if self.on_model_load:
+                    self.on_model_load(model_id, False)
         return self._backends[model_id]
 
     def release(self, keep: set[str] | None = None) -> None:
@@ -296,6 +321,9 @@ class Pipeline:
             )
 
         an = analysis or self.analyze(img, s, detect_faces=s.faces.enabled is not False)
+        # The suggestion depends on the model (photo models remove noise themselves); an
+        # analysis cached by the server was made once, so re-derive it for these settings.
+        an = replace(an, denoise=suggest(an.noise, img.meta, "clean" if denoise_only else s.model))
         faces = self._select_faces(an.faces, s.faces)
         want_faces = bool(faces) and s.faces.enabled is not False
         den_strength = self._denoise_strength(s, an)
