@@ -43,3 +43,9 @@ weights/
 
 # Private test photos (DxO PureRAW output) - never commit
 /dxo/
+
+# Electron app build outputs
+app/out/
+app/test-results/
+app/playwright-report/
+!app/build/

@@ -4,8 +4,13 @@ Lokaler KI-Upscaler für Fotos auf Basis von **HAT** (Hybrid Attention Transform
 Bild hineinziehen, Modell wählen, fertig. Alles läuft auf dem eigenen Rechner, ohne Konto
 und ohne Telemetrie.
 
-> **Status:** in Entwicklung (Etappe 2 von 6: Bildpipeline und Kommandozeile).
-> Einen Installer gibt es noch nicht. Screenshot folgt mit der Oberfläche in Etappe 4.
+> **Status:** in Entwicklung (Etappe 4 von 6: Desktop-Oberfläche). Einen Installer gibt es
+> noch nicht.
+
+![Pixforge: Vorher/Nachher-Vergleich mit Gesichtserkennung](docs/images/main.png)
+
+*Beispielbild: Solvay-Konferenz 1927 (gemeinfrei), 900 px breit, links Original, rechts
+Pixforge 4× mit Gesichtsverbesserung.*
 
 ## Für Anwenderinnen und Anwender
 
@@ -15,12 +20,17 @@ rechnet ohne passende Grafikkarte auf dem Prozessor, dann allerdings deutlich la
 
 ## Für Entwickler
 
-Voraussetzungen: Windows 10/11, [uv](https://docs.astral.sh/uv/), Git, Node.js (ab Etappe 4).
+Voraussetzungen: Windows 10/11, [uv](https://docs.astral.sh/uv/), Git, Node.js 22+.
 
 ```powershell
 cd backend
 uv sync --extra export --extra raw   # Python 3.12 venv inkl. PyTorch (CPU) für den Export
 uv run pytest
+
+cd ..\app
+npm install
+npm run dev          # startet Oberfläche und Backend zusammen
+npm run test:e2e     # Smoke-Test der echten App (Electron + Backend + Modelle)
 ```
 
 Hinter einem HTTPS-prüfenden Virenscanner (z. B. Avast) vorher `UV_SYSTEM_CERTS=1` setzen.

@@ -41,6 +41,23 @@ changes made. HAT and SCUNet contain parts derived from SwinIR (Apache-2.0) and 
 | imagecodecs | LZW/ZIP compression for TIFF | BSD-3-Clause (bundled codec libraries under permissive licenses) |
 | rawpy (optional `raw` extra) | camera RAW decoding | MIT; bundles **LibRaw** under **LGPL-2.1 or CDDL-1.0** as a separate DLL |
 
+| fastapi, starlette, pydantic | local HTTP API for the app | MIT / BSD-3-Clause / MIT |
+| uvicorn, websockets | HTTP/WebSocket server | BSD-3-Clause |
+
+## Desktop app (shipped)
+
+| Package | Purpose | License |
+|---|---|---|
+| Electron (includes Chromium, Node.js) | desktop shell | MIT (Chromium: BSD-3-Clause and others, see `LICENSES.chromium.html` in the installer) |
+| React, React DOM | user interface | MIT |
+| zustand | UI state | MIT |
+| i18next, react-i18next | German / English texts | MIT |
+| lucide-react | icons | ISC |
+| Inter (@fontsource-variable/inter) | typeface | SIL Open Font License 1.1 |
+
+Build tools for the app (not shipped): electron-vite, Vite, Tailwind CSS, TypeScript, ESLint,
+Prettier, Playwright (MIT / Apache-2.0).
+
 LGPL components are dynamically linked and shipped as separate files; they can be replaced by
 the user, and their license texts are included in the installer.
 
