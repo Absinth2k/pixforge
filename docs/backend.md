@@ -171,6 +171,7 @@ und Detail-Erhalt (Laplace-Energie im Verhältnis zum Original, auf halber Aufl�
    | dieselben RAWs als JPEG 4:2:0, Q92 | 0,7–5,7 | 0,45–4,45 | 0,5–0,9 |
    | DxO DeepPRIME 3 | 0,3–5,7 | 0,07–0,33 | 0,05–0,43 |
    | Pixel 8 Pro, Tageslicht-JPEG | 0,0–3,5¹ | 0,00 | 0 |
+   | iPhone 12 Pro / iPad Air / Samsung A32, HEIC | 0,0–0,7 | 0,00 | 0 |
 
    ¹ Die Pixel-Fotos haben keine glatten Flächen; Luma misst dort Putz- und Steinstruktur.
    In wirklich ruhigen Blöcken hat Handy-Software plus JPEG jedes feine Detail entfernt.
