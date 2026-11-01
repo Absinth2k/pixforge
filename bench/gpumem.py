@@ -12,8 +12,12 @@ import time
 from ctypes import wintypes
 
 pdh = ctypes.WinDLL("pdh")
-for _fn in ("PdhOpenQueryW", "PdhAddEnglishCounterW", "PdhCollectQueryData",
-            "PdhGetFormattedCounterArrayW"):
+for _fn in (
+    "PdhOpenQueryW",
+    "PdhAddEnglishCounterW",
+    "PdhCollectQueryData",
+    "PdhGetFormattedCounterArrayW",
+):
     getattr(pdh, _fn).restype = wintypes.DWORD  # PDH status codes are unsigned
 
 PDH_FMT_LARGE = 0x00000400

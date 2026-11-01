@@ -68,8 +68,10 @@ def main() -> int:
             dt = time.perf_counter() - t
             p = psnr(ref, out)
             ok &= p > 50
-            print(f"{spec:>9} {name}: PSNR {p:6.2f} dB  max|d| {np.abs(ref - out).max():.2e}  "
-                  f"{dt * 1000:7.0f} ms (first run)")
+            print(
+                f"{spec:>9} {name}: PSNR {p:6.2f} dB  max|d| {np.abs(ref - out).max():.2e}  "
+                f"{dt * 1000:7.0f} ms (first run)"
+            )
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 

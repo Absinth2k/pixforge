@@ -152,8 +152,9 @@ def sheet(rows: list[tuple[str, np.ndarray]], out: Path, zoom: int = 384) -> Non
         c = img[(h - zoom) // 2 : (h + zoom) // 2, (w - zoom) // 2 : (w + zoom) // 2]
         t = cv2.cvtColor((np.clip(c, 0, 1) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         t = cv2.copyMakeBorder(t, 28, 0, 0, 4, cv2.BORDER_CONSTANT, value=(24, 24, 24))
-        cv2.putText(t, label, (6, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (235, 235, 235), 1,
-                    cv2.LINE_AA)
+        cv2.putText(
+            t, label, (6, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (235, 235, 235), 1, cv2.LINE_AA
+        )
         tiles.append(t)
     cv2.imwrite(str(out), np.hstack(tiles))
 
@@ -163,9 +164,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--photos", type=Path, required=True)
     ap.add_argument("--models-dir", type=Path, default=Path("../bench/out"))
-    ap.add_argument("--models", nargs="+",
-                    default=["scunet_real_psnr_fp16", "scunet_real_psnr", "nafnet_sidd_fp16",
-                             "nafnet_sidd"])
+    ap.add_argument(
+        "--models",
+        nargs="+",
+        default=["scunet_real_psnr_fp16", "scunet_real_psnr", "nafnet_sidd_fp16", "nafnet_sidd"],
+    )
     ap.add_argument("--out", type=Path, default=Path("../bench/out/denoise"))
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -173,8 +176,10 @@ def main() -> int:
     methods: dict[str, object] = {"nlmeans": nlmeans}
     for m in args.models:
         methods[m] = ModelMethod(args.models_dir / f"{m}.onnx")
-    print("device:", next(v for v in methods.values() if isinstance(v, ModelMethod))
-          .backend.device_info().name)
+    print(
+        "device:",
+        next(v for v in methods.values() if isinstance(v, ModelMethod)).backend.device_info().name,
+    )
 
     files = sorted(p for p in args.photos.iterdir() if p.suffix.lower() in RAW_EXT | IMG_EXT)
     results: dict[str, list[dict[str, object]]] = {"real": [], "synthetic": []}
@@ -183,15 +188,22 @@ def main() -> int:
     for f in files:
         img = load_photo(f, args.out / "cache")
         est0 = estimate_noise(img)
-        print(f"\n{f.name}: {img.shape[1]}x{img.shape[0]}  noise luma {est0.luma_sigma:.2f} "
-              f"chroma {est0.chroma_sigma:.2f}")
+        print(
+            f"\n{f.name}: {img.shape[1]}x{img.shape[0]}  noise luma {est0.luma_sigma:.2f} "
+            f"chroma {est0.chroma_sigma:.2f}"
+        )
         for region, (y0, x0) in pick_crops(img).items():
             crop = np.ascontiguousarray(img[y0 : y0 + CROP, x0 : x0 + CROP])
             e = estimate_noise(crop)
             d0 = detail_energy(crop)
             rows = [("Original", crop)]
-            entry = {"file": f.name, "region": region, "luma": round(e.luma_sigma, 2),
-                     "chroma": round(e.chroma_sigma, 2), "methods": {}}
+            entry = {
+                "file": f.name,
+                "region": region,
+                "luma": round(e.luma_sigma, 2),
+                "chroma": round(e.chroma_sigma, 2),
+                "methods": {},
+            }
             for name, fn in methods.items():
                 t = time.perf_counter()
                 res = fn(crop)  # type: ignore[operator]
@@ -206,38 +218,56 @@ def main() -> int:
                 rows.append((name, res))
             sheet(rows, args.out / f"{f.stem}_{region}.png")
             results["real"].append(entry)
-            print(f"  {region:8} luma {e.luma_sigma:5.2f} chroma {e.chroma_sigma:5.2f} | " +
-                  "  ".join(f"{k}: {v['luma_after']:.2f}/{v['chroma_after']:.2f} "
-                            f"det {v['detail_kept']:.2f}" for k, v in entry["methods"].items()))
+            print(
+                f"  {region:8} luma {e.luma_sigma:5.2f} chroma {e.chroma_sigma:5.2f} | "
+                + "  ".join(
+                    f"{k}: {v['luma_after']:.2f}/{v['chroma_after']:.2f} det {v['detail_kept']:.2f}"
+                    for k, v in entry["methods"].items()
+                )
+            )
 
         # Part B: synthetic noise on a 4x-downscaled (clean) copy
-        small = cv2.resize(img, (img.shape[1] // 4, img.shape[0] // 4),
-                           interpolation=cv2.INTER_AREA)
+        small = cv2.resize(
+            img, (img.shape[1] // 4, img.shape[0] // 4), interpolation=cv2.INTER_AREA
+        )
         sh, sw = small.shape[:2]
-        clean = np.ascontiguousarray(small[(sh - CROP) // 2 : (sh + CROP) // 2,
-                                           (sw - CROP) // 2 : (sw + CROP) // 2])
+        clean = np.ascontiguousarray(
+            small[(sh - CROP) // 2 : (sh + CROP) // 2, (sw - CROP) // 2 : (sw + CROP) // 2]
+        )
         if clean.shape[:2] != (CROP, CROP):
             continue
         for lvl, (shot, read) in NOISE_LEVELS.items():
             noisy = add_noise(clean, shot, read, seed=zlib.crc32(f"{f.name}{lvl}".encode()))
-            entry = {"file": f.name, "level": lvl,
-                     "noisy": {"psnr": round(psnr(noisy, clean), 2),
-                               "ssim": round(ssim_y(noisy, clean), 4)}, "methods": {}}
+            entry = {
+                "file": f.name,
+                "level": lvl,
+                "noisy": {
+                    "psnr": round(psnr(noisy, clean), 2),
+                    "ssim": round(ssim_y(noisy, clean), 4),
+                },
+                "methods": {},
+            }
             rows = [("sauber", clean), (f"Rauschen {lvl}", noisy)]
             for name, fn in methods.items():
                 res = fn(noisy)  # type: ignore[operator]
-                entry["methods"][name] = {"psnr": round(psnr(res, clean), 2),
-                                          "ssim": round(ssim_y(res, clean), 4)}
+                entry["methods"][name] = {
+                    "psnr": round(psnr(res, clean), 2),
+                    "ssim": round(ssim_y(res, clean), 4),
+                }
                 rows.append((name, res))
             if lvl == "mittel":
                 sheet(rows, args.out / f"{f.stem}_synthetic_{lvl}.png")
             results["synthetic"].append(entry)
-            print(f"  synth {lvl:6} noisy {entry['noisy']['psnr']:.2f} dB | " +
-                  "  ".join(f"{k}: {v['psnr']:.2f}/{v['ssim']:.3f}"
-                            for k, v in entry["methods"].items()))
+            print(
+                f"  synth {lvl:6} noisy {entry['noisy']['psnr']:.2f} dB | "
+                + "  ".join(
+                    f"{k}: {v['psnr']:.2f}/{v['ssim']:.3f}" for k, v in entry["methods"].items()
+                )
+            )
 
-    results["timing_s_per_mp"] = {k: round(float(np.median(v[1:] or v)), 3)
-                                  for k, v in timing.items() if v}
+    results["timing_s_per_mp"] = {
+        k: round(float(np.median(v[1:] or v)), 3) for k, v in timing.items() if v
+    }
     (args.out / "results.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
     print("\ntiming s/MP:", results["timing_s_per_mp"])
     return 0

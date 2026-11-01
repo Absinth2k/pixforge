@@ -1,6 +1,7 @@
 """Export SCUNet / NAFNet / FBCNN to ONNX (fp32 + mixed fp16) and verify against PyTorch.
 
-Run from backend/:  .venv/Scripts/python ../bench/verify_restore_onnx.py ../weights/denoise ../bench/out
+Run from backend/:
+  .venv/Scripts/python ../bench/verify_restore_onnx.py ../weights/denoise ../bench/out
 """
 
 from __future__ import annotations
@@ -31,10 +32,14 @@ def main() -> int:
         spec = build_spec(arch, wdir / wname)
         for fp16 in (False, True):
             out = odir / f"{stem}{'_fp16' if fp16 else ''}.onnx"
-            meta = {"pixforge.arch": arch, "pixforge.scale": "1",
-                    "pixforge.align": str(spec.alignment), "pixforge.license": spec.license,
-                    "pixforge.source": wname,
-                    "pixforge.precision": "mixed-fp16" if fp16 else "fp32"}
+            meta = {
+                "pixforge.arch": arch,
+                "pixforge.scale": "1",
+                "pixforge.align": str(spec.alignment),
+                "pixforge.license": spec.license,
+                "pixforge.source": wname,
+                "pixforge.precision": "mixed-fp16" if fp16 else "fp32",
+            }
             export(spec, out, 128, fp16=fp16, metadata=meta)
             x = synthetic_photo(256, 320)
             extra = {k: np.array(f(256)) for k, f in spec.extra_inputs.items()}
@@ -51,8 +56,10 @@ def main() -> int:
                 y = sess.run(None, {"input": x, **extra})[0]
                 p = psnr(ref, y)
                 ok &= p > 50
-                print(f"{out.name:28} {out.stat().st_size / 2**20:6.1f} MB  {prov[:3]}  "
-                      f"PSNR {p:6.2f} dB")
+                print(
+                    f"{out.name:28} {out.stat().st_size / 2**20:6.1f} MB  {prov[:3]}  "
+                    f"PSNR {p:6.2f} dB"
+                )
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 

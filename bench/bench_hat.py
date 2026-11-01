@@ -75,10 +75,23 @@ def main() -> int:
     with args.out.open("a", encoding="utf-8") as fh:
         for model in args.models:
             for tile in (int(t) for t in args.tiles.split(",")):
-                cmd = [sys.executable, __file__, "--child", "--models", model, "--tile", str(tile),
-                       "--device", args.device, "--runs", str(args.runs)]
+                cmd = [
+                    sys.executable,
+                    __file__,
+                    "--child",
+                    "--models",
+                    model,
+                    "--tile",
+                    str(tile),
+                    "--device",
+                    args.device,
+                    "--runs",
+                    str(args.runs),
+                ]
                 proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-                line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("RESULT ")), None)
+                line = next(
+                    (ln for ln in proc.stdout.splitlines() if ln.startswith("RESULT ")), None
+                )
                 if line is None:
                     err = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or ["?"]
                     print(f"{Path(model).name} tile {tile}: FAILED {err[0][:200]}")
@@ -86,9 +99,12 @@ def main() -> int:
                 res = json.loads(line[7:])
                 fh.write(json.dumps(res) + "\n")
                 fh.flush()
-                print(f"{res['model']:32} {res['device'][:22]:22} tile {tile:4}: "
-                      f"{res['ms_per_tile']:8.0f} ms  {res['s_per_input_mp_with_overlap']:7.1f} s/MP(in)"
-                      f"  VRAM {res['vram_peak_mb']} MB  first {res['first_run_s']} s")
+                print(
+                    f"{res['model']:32} {res['device'][:22]:22} tile {tile:4}: "
+                    f"{res['ms_per_tile']:8.0f} ms  "
+                    f"{res['s_per_input_mp_with_overlap']:7.1f} s/MP(in)"
+                    f"  VRAM {res['vram_peak_mb']} MB  first {res['first_run_s']} s"
+                )
     return 0
 
 

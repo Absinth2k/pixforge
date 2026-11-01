@@ -1,0 +1,198 @@
+# Inferenz-Backend: Messungen und Entscheidungen
+
+Stand: Etappe 1, 01.11.2026. Entwicklungsrechner: Windows 11 Pro, Intel Core Ultra 9 285K,
+AMD Radeon RX 9070 XT (RDNA4, 16 GB, Treiber 32.0.32015 vom 18.10.2026),
+ONNX Runtime 1.24.4 (DirectML), PyTorch 2.15 (CPU, nur für den Export).
+
+Skripte: `bench/verify_hat_onnx.py`, `bench/verify_restore_onnx.py`, `bench/bench_hat.py`,
+`bench/bench_denoise.py`. Rohdaten landen in `bench/out/` (nicht im Repo).
+
+## 1. Entscheidungen auf einen Blick
+
+| Thema | Entscheidung | Begründung |
+|---|---|---|
+| Laufzeit für Endnutzer | **ONNX Runtime + DirectML**, CPU als Rückfall | läuft auf NVIDIA/AMD/Intel ohne Zusatzinstallation |
+| Präzision | **gemischtes FP16** auf der GPU, **FP32** auf der CPU | GPU 1,7× schneller bei 65–69 dB Abweichung; auf der CPU ist FP16 langsamer |
+| Kachelgröße | **dynamisch**, eine ONNX-Datei pro Modell; Größe aus freiem VRAM (Formel unten) | Durchsatz ab 256 px praktisch konstant |
+| Entrauschen | **SCUNet (real, PSNR)**, gemischtes FP16 | klar bestes Ergebnis; NAFNet verfälscht Farben und ist instabil |
+| Entrauschen anwenden | nur oberhalb einer Rauschschwelle, als Mischung mit Detailschutz | bei wenig Rauschen glättet jedes Modell echte Struktur weg |
+| JPEG-Artefakte | **FBCNN** exportiert und verifiziert; Bewertung mit echten JPEGs in Etappe 2 | eigene Aufgabe, an RAWs nicht sinnvoll messbar |
+| Modell-Verteilung | vorkonvertierte ONNX-Dateien als **GitHub-Release** mit SHA256 | alle Lizenzen erlauben Weitergabe (Abschnitt 6) |
+
+## 2. HAT nach ONNX
+
+Die HAT-Architektur ist neu geschrieben (`models/hat_arch.py`), ohne `basicsr`/`einops`, und
+liefert **bitgenau** dieselben Ausgaben wie der Originalcode (max. Abweichung 0,0).
+
+Zwei Probleme beim Export und ihre Lösung:
+
+1. **Aufmerksamkeitsmaske als Konstante.** Der naive Export backt die Maske der verschobenen
+   Fenster 18× als 64-MB-Konstante ein, die Datei hat dann 1,3 GB. Jetzt ist die Maske ein
+   **Modell-Eingang** (`attn_mask`), den Pixforge in NumPy berechnet (`models/hat_mask.py`).
+   Nebeneffekt: Höhe und Breite sind **dynamisch** (Vielfache von 16), eine Datei mit 83 MB
+   reicht für alle Kachelgrößen.
+2. **FP16-Überlauf.** Der Residual-Strom in der letzten HAT-Gruppe erreicht ~1,8·10⁶, viele
+   Kanal-Attention-Zwischenwerte liegen bei 30 000–51 000 (FP16-Grenze 65 504). Lösung:
+   Kalibrierung mit Testmustern; jeder Knoten, der einen Tensor über 1/8 des FP16-Bereichs liest
+   oder schreibt, bleibt FP32 (HAT: 162 von 10 857 Knoten). Zusätzlich entfernt der Export
+   FP32→FP16→FP32-Cast-Paare, die der ONNX-Runtime-Konverter zwischen zwei FP32-Knoten einfügt
+   und an denen der Wert sonst doch überläuft.
+
+Parität gegen PyTorch (synthetisches Testbild, PSNR, Ziel > 50 dB):
+
+| Modell | CPU | DirectML |
+|---|---|---|
+| Real_HAT_GAN_SRx4, FP32 | 131,5 dB | 131,0 dB |
+| Real_HAT_GAN_SRx4, gemischtes FP16 | 76,4 dB | 67,1 dB |
+| HAT-L_SRx4, gemischtes FP16 | 79,2 dB | 66,4 dB |
+
+Dateigrößen: HAT 83 MB (FP32) / 47 MB (FP16), HAT-L 161 MB / 86 MB.
+
+## 3. Geschwindigkeit und VRAM (HAT ×4)
+
+Pro Konfiguration ein frischer Prozess. Median aus 3 Läufen nach dem Aufwärmen. „s/MP“ heißt
+Sekunden pro Megapixel **Eingabe**, bereits mit 32 px Kachelüberlappung gerechnet. VRAM ist der
+Spitzenwert des Prozesses (Windows-Leistungsindikator „GPU Process Memory“).
+
+### RX 9070 XT, DirectML
+
+| Modell | Präzision | Kachel | ms/Kachel | s/MP | VRAM |
+|---|---|---:|---:|---:|---:|
+| HAT (Real GAN) | FP32 | 256 | 874 | 17,4 | 4,6 GB |
+| HAT (Real GAN) | FP32 | 384 | 1 902 | 15,3 | 9,1 GB |
+| HAT (Real GAN) | FP32 | 512 | 37 338 | 162 | 12,8 GB ⚠ |
+| HAT (Real GAN) | **FP16 gemischt** | 192 | 276 | 10,8 | 1,4 GB |
+| HAT (Real GAN) | **FP16 gemischt** | 256 | 501 | **10,0** | 2,6 GB |
+| HAT (Real GAN) | **FP16 gemischt** | 384 | 1 238 | **10,0** | 5,3 GB |
+| HAT (Real GAN) | **FP16 gemischt** | 512 | 2 415 | 10,5 | 9,9 GB |
+| HAT-L | FP32 | 384 | 3 699 | 29,9 | 9,3 GB |
+| HAT-L | FP32 | 512 | 73 354 | 318 | 13,0 GB ⚠ |
+| HAT-L | **FP16 gemischt** | 256 | 964 | **19,2** | 2,7 GB |
+| HAT-L | **FP16 gemischt** | 384 | 2 426 | 19,6 | 5,4 GB |
+
+⚠ Ab ~12,8 GB lagert der Treiber in den geteilten Systemspeicher aus, die Laufzeit steigt um das
+20-Fache. Die automatische Kachelwahl muss davor klar Abstand halten.
+
+Erster Lauf pro Kachelgröße: +0,5–1,5 s (Shader-Kompilierung). Deshalb bleibt die Kachelgröße
+innerhalb eines Bildes konstant, Randkacheln werden aufgefüllt.
+
+**Was das praktisch heißt** (HAT, FP16, 4×): 1 MP → 16 MP in ~10 s; 12-MP-Handyfoto → 48 MP in
+~2 Minuten; HAT-L doppelt so lange.
+
+### Intel Core Ultra 9 285K, CPU
+
+| Modell | Präzision | Kachel | ms/Kachel | s/MP |
+|---|---|---:|---:|---:|
+| HAT (Real GAN) | FP32 | 128 | 2 729 | 296 |
+| HAT (Real GAN) | FP32 | 256 | 15 618 | 311 |
+| HAT (Real GAN) | FP16 gemischt | 256 | 18 036 | 360 |
+
+Die CPU ist ~30× langsamer als die GPU: Ein 12-MP-Foto braucht rund **eine Stunde**. Die
+Oberfläche muss das vorher ehrlich anzeigen und für CPU-Nutzer eine kleinere Zielgröße oder
+2× vorschlagen. Auf der CPU wird das FP32-Modell geladen.
+
+### Kachelgröße aus dem VRAM
+
+Der VRAM-Bedarf wächst linear mit der Kachelfläche:
+FP16 ≈ 0,5 GB + 38 KB × Pixel, FP32 ≈ 0,9 GB + 56 KB × Pixel (konservativ, HAT und HAT-L).
+Regel: größte Kachel aus {128, 192, 256, 384}, deren Schätzung höchstens **50 % des
+freien VRAM** belegt.
+Beispiele: 16 GB → 384; 8 GB → 256; 4 GB → 192; 2 GB → 128. Bei einem
+Speicherfehler halbiert Pixforge die Kachel und rechnet die Kachel neu.
+
+### Geräteerkennung
+
+ONNX Runtime 1.24 meldet über `get_ep_devices()` Name, VRAM, „diskret“ und den DXGI-Index jeder
+DirectML-GPU. Pixforge sortiert: diskrete GPU vor integrierter, dann nach VRAM. Auf diesem
+Rechner erscheint nur die RX 9070 XT. Die Intel-iGPU taucht nicht als DirectML-Gerät auf
+(wahrscheinlich wegen ihres Treibers von 11/2024); wäre sie gelistet, käme sie hinter der
+Radeon.
+
+## 4. Entrauschen vor dem Upscale
+
+### Kandidaten
+
+| Modell | Herkunft | Lizenz | ONNX FP32 / FP16 | Parität DirectML (FP16) |
+|---|---|---|---|---|
+| SCUNet color real (PSNR) | cszn/SCUNet | Apache-2.0 | 72 / 38 MB | 68,7 dB |
+| NAFNet SIDD width64 | megvii-research/NAFNet | MIT | 443 / 232 MB | 64,7 dB |
+| FBCNN color | jiaxi-jiang/FBCNN | Apache-2.0 | 274 / 137 MB | 69,2 dB |
+| OpenCV fastNlMeans | OpenCV | Apache-2.0 | – | – |
+
+Alle drei Netze sind neu geschrieben und liefern bitgenau die Originalausgaben. Für DirectML
+musste SCUNet angepasst werden: 5-dimensionale MatMuls lehnt DirectML ab, die Köpfe werden in
+die Batch-Dimension gefaltet.
+
+### Testmaterial
+
+5 Canon-CR3-Aufnahmen von Andre (nicht im Repo), entwickelt mit LibRaw (rawpy) ohne eigene
+Rauschminderung. Zwei davon sind stark verrauscht (Luma-σ ≈ 5 in 8-Bit-Einheiten), drei
+leicht (σ ≈ 1–1,8).
+
+**A. Echte Fotos** (je 3 Ausschnitte 768², kein rauschfreies Original vorhanden): Restrauschen
+und Detail-Erhalt (Laplace-Energie im Verhältnis zum Original, auf halber Auflösung).
+**B. Synthetisch**: Foto 4× verkleinert (nahezu rauschfrei), dann signalabhängiges Rauschen
+(Schrot + Ausleserauschen in linearem Licht) in drei Stufen, PSNR/SSIM gegen das saubere Bild.
+
+### Ergebnisse B: synthetisch (PSNR dB / SSIM, Mittel über 4 Fotos)
+
+| Stufe | verrauscht | nlmeans | **SCUNet** | NAFNet |
+|---|---|---|---|---|
+| leicht | 31,6 / 0,80 | 29,9 / 0,79 | **33,0 / 0,88** | 28,3 / 0,80 |
+| mittel | 26,7 / 0,61 | 26,8 / 0,64 | **32,4 / 0,87** | 26,3 / 0,72 |
+| stark | 22,6 / 0,42 | 24,9 / 0,53 | **31,6 / 0,87** | 18,6 / 0,44 ⚠ |
+
+⚠ NAFNet bricht bei einem Foto komplett ein (4,1 dB). Auch ohne diesen Ausreißer liegt es
+überall hinter SCUNet.
+
+### Ergebnisse A: echte Fotos
+
+- Stark verrauschte Aufnahmen (σ ≈ 5): SCUNet entfernt das Rauschen nahezu vollständig
+  (σ < 0,15) und erhält dabei Farben, Kontrast und feine Kanten (Seile, Gitter). NAFNet
+  verschiebt die Farben sichtbar: blasser, flauer, Rottöne kippen. Der Grund ist vermutlich,
+  dass SIDD nur aus Handyfotos besteht. nlmeans lässt viel Farbrauschen stehen.
+- Leicht verrauschte Aufnahmen (σ ≈ 1–1,8): Alle Verfahren entfernen mehr als nötig. SCUNet
+  erhält nur 56–78 % der Detail-Energie, abgeschabte Flächen und Stoff wirken wachsartig.
+
+### Folgerungen für die Pipeline (Etappe 2)
+
+1. **SCUNet ist das Standardmodell.** NAFNet fliegt raus. Als Alternative mit mehr Textur
+   prüfe ich in Etappe 2 die GAN-Variante von SCUNet (gleiche Lizenz, gleiche Größe).
+2. **Schwelle:** Unter Luma-σ ≈ 1,5 entrauscht Pixforge nicht, der Regler zeigt dann „kein
+   Rauschen erkannt“. Das deckt auch Andres Arbeitsweise ab: Fotos, die vorher in DxO
+   PureRAW entrauscht wurden, liegen deutlich darunter und werden nicht doppelt bearbeitet.
+   Die Schwelle wird in Etappe 2 an solchen Dateien kalibriert.
+3. **Stärke als Mischung** Original ↔ SCUNet, Startwert aus der Messung, dazu eine Kantenmaske
+   für den Detailschutz (in glatten Flächen stärker, an Kanten und Textur schwächer).
+4. **Real-HAT-GAN entrauscht selbst leicht**, die Automatik dort zurücknehmen (wie geplant).
+5. Kosten: SCUNet FP16 braucht **0,34 s/MP**, NAFNet FP16 0,22 s/MP, nlmeans (CPU) 0,44 s/MP.
+   Neben HAT (10 s/MP) fällt das nicht ins Gewicht.
+
+## 5. PyTorch mit ROCm unter Windows (optional, nur Entwicklung)
+
+AMD bietet offizielle Windows-Wheels an: PyTorch 2.9.1 + ROCm 7.2.1, nur Python 3.12,
+RX 9070 XT (gfx1201) unterstützt, Treiber ≥ 26.2.2 nötig. Der installierte Treiber vom
+18.10.2026 ist neuer. **Noch nicht gemessen:** Die Installation (mehrere GB von
+repo.radeon.com) wurde im automatischen Modus nicht freigegeben und wartet auf Andres OK.
+Für das Endnutzer-Paket ist ROCm ohnehin keine Option: Es läuft nur auf neueren AMD-Karten und
+wäre um ein Vielfaches größer. Interessant ist es nur, wenn es deutlich schneller ist, etwa für
+eigene Experimente.
+
+## 6. Lizenzen und Bereitstellung der Modelle
+
+HAT (Apache-2.0), SCUNet (Apache-2.0), FBCNN (Apache-2.0) und NAFNet (MIT) erlauben Änderung
+und Weitergabe, auch als konvertierte Dateien, wenn Lizenztext und Herkunftsvermerk beiliegen.
+Plan: Pixforge lädt die vorkonvertierten ONNX-Dateien aus einem eigenen GitHub-Release
+(`models-v1`) mit SHA256-Prüfung; im Release liegen die Lizenztexte und `THIRD_PARTY.md`.
+Lokales Konvertieren ist damit nicht nötig und bleibt nur als Entwickler-Weg
+(`python -m pixforge.models.export_onnx`).
+
+Offen für Etappe 2: Lizenz der Gesichtserkennungs-Gewichte (facexlib/RetinaFace) und von
+GFPGAN v1.4. Das GFPGAN-Repo hat eine gemischte LICENSE-Datei, die ich vor dem Einbinden
+genau prüfe.
+
+## 7. Netzwerk-Hinweis
+
+Auf dem Entwicklungsrechner prüft Avast HTTPS-Verbindungen mit einem eigenen Root-Zertifikat.
+Pixforge lädt Modelle deshalb über `truststore`, also mit dem Windows-Zertifikatsspeicher.
+Damit funktioniert der Download auch bei Endnutzern mit solcher Software.
