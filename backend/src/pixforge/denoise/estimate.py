@@ -25,6 +25,11 @@ class NoiseEstimate:
     luma_sigma: float  # 8-bit units
     chroma_sigma: float  # 8-bit units, mean of Cb and Cr
     flat_fraction: float  # share of blocks used
+    colorfulness: float = 99.0  # mean |Cb| + |Cr| in 8-bit units; ~0 for black-and-white
+
+    @property
+    def is_grayscale(self) -> bool:
+        return self.colorfulness < 2.0
 
     @property
     def level(self) -> float:
@@ -83,8 +88,9 @@ def estimate_noise(
     ycc = _rgb_to_ycbcr(rgb[..., :3].astype(np.float32)) * 255.0
 
     act = _block_activity(ycc[..., 0], block)
+    colorful = float(np.mean(np.abs(ycc[..., 1])) + np.mean(np.abs(ycc[..., 2])))
     if act.size == 0:
-        return NoiseEstimate(0.0, 0.0, 0.0)
+        return NoiseEstimate(0.0, 0.0, 0.0, colorful)
     # Exclude clipped (pure black / white) blocks: they carry no noise.
     luma_lo = _block_mean(ycc[..., 0], block)
     valid = (luma_lo > 8) & (luma_lo < 247)
@@ -96,7 +102,7 @@ def estimate_noise(
     sig = [_block_sigmas(_haar_hh(ycc[..., c]), block)[: act.size] for c in range(3)]
     luma = float(np.median(sig[0][sel]))
     chroma = float(np.median(np.concatenate([sig[1][sel], sig[2][sel]])))
-    return NoiseEstimate(luma, chroma, float(sel.mean()))
+    return NoiseEstimate(luma, chroma, float(sel.mean()), colorful)
 
 
 def _block_mean(y: np.ndarray, block: int) -> np.ndarray:

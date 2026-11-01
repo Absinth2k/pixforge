@@ -61,9 +61,14 @@ class NAFBlock(nn.Module):
 class NAFNet(nn.Module):
     """Input/output: (b, 3, h, w) RGB 0..1, h and w multiples of 2**len(enc_blk_nums)."""
 
-    def __init__(self, img_channel: int = 3, width: int = 64, middle_blk_num: int = 12,
-                 enc_blk_nums: tuple[int, ...] = (2, 2, 4, 8),
-                 dec_blk_nums: tuple[int, ...] = (2, 2, 2, 2)) -> None:
+    def __init__(
+        self,
+        img_channel: int = 3,
+        width: int = 64,
+        middle_blk_num: int = 12,
+        enc_blk_nums: tuple[int, ...] = (2, 2, 4, 8),
+        dec_blk_nums: tuple[int, ...] = (2, 2, 2, 2),
+    ) -> None:
         super().__init__()
         self.intro = nn.Conv2d(img_channel, width, 3, padding=1)
         self.ending = nn.Conv2d(width, img_channel, 3, padding=1)
@@ -78,8 +83,9 @@ class NAFNet(nn.Module):
             chan *= 2
         self.middle_blks = nn.Sequential(*[NAFBlock(chan) for _ in range(middle_blk_num)])
         for num in dec_blk_nums:
-            self.ups.append(nn.Sequential(nn.Conv2d(chan, chan * 2, 1, bias=False),
-                                          nn.PixelShuffle(2)))
+            self.ups.append(
+                nn.Sequential(nn.Conv2d(chan, chan * 2, 1, bias=False), nn.PixelShuffle(2))
+            )
             chan //= 2
             self.decoders.append(nn.Sequential(*[NAFBlock(chan) for _ in range(num)]))
         self.alignment = 2 ** len(enc_blk_nums)

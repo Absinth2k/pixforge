@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 
-from pixforge.backends.base import BackendError, DeviceInfo, InferenceBackend
+from pixforge.backends.base import BackendError, DeviceInfo, InferenceBackend, OutOfMemory
 from pixforge.models.hat_mask import shifted_window_mask
 
 log = logging.getLogger(__name__)
@@ -89,15 +89,21 @@ class OnnxBackend(InferenceBackend):
         #: FBCNN only: 1 - jpeg_quality/100, or -1 for per-tile automatic estimation
         self.jpeg_qf = -1.0
         self.last_extra_outputs: list[np.ndarray] = []
+        self._signed_range = False
+        self.precision = "fp32"
+        self.fixed_size: int | None = None
+        self.model_file: Path | None = None
 
     # -- InferenceBackend -------------------------------------------------
     def load(self, model_id: str | Path) -> None:
+        cand = self._pick_candidate()
         path = Path(model_id)
         if not path.is_file():
             from pixforge.models.registry import model_path  # lazy: registry is optional here
 
-            path = model_path(str(model_id))
-        cand = self._pick_candidate()
+            # Mixed fp16 on GPUs (1.7x faster), fp32 on the CPU (fp16 is slower there).
+            path = model_path(str(model_id), "fp16" if cand.info.kind == "gpu" else "fp32")
+        self.model_file = path
         so = ort.SessionOptions()
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         so.log_severity_level = 3
@@ -126,6 +132,10 @@ class OnnxBackend(InferenceBackend):
         self.alignment = int(meta.get("pixforge.align", default_align))
         in_type = self._session.get_inputs()[0].type
         self._input_dtype = np.float16 if "float16" in in_type else np.float32
+        self._signed_range = meta.get("pixforge.range") == "-1..1"
+        self.precision = meta.get("pixforge.precision", "fp32")
+        fixed = self._session.get_inputs()[0].shape[2]
+        self.fixed_size = fixed if isinstance(fixed, int) else None
         self.last_extra_outputs: list[np.ndarray] = []
 
     def run_tile(self, tile: np.ndarray) -> np.ndarray:
@@ -136,6 +146,8 @@ class OnnxBackend(InferenceBackend):
         h, w = tile.shape[:2]
         if self.alignment > 1 and (h % self.alignment or w % self.alignment):
             raise ValueError(f"tile {h}x{w} not aligned to {self.alignment}")
+        if self._signed_range:
+            tile = tile * 2.0 - 1.0
         x = np.ascontiguousarray(tile.transpose(2, 0, 1)[None], dtype=self._input_dtype)
         feeds: dict[str, np.ndarray] = {"input": x}
         if self._needs_mask:
@@ -151,9 +163,12 @@ class OnnxBackend(InferenceBackend):
         except Exception as exc:
             msg = str(exc)
             if "887A0005" in msg or "887A0006" in msg or "OUTOFMEMORY" in msg.upper():
-                raise BackendError("Grafikkarte hat zu wenig Speicher") from exc
+                raise OutOfMemory("Grafikkarte hat zu wenig Speicher") from exc
             raise
-        return np.ascontiguousarray(y[0].transpose(1, 2, 0), dtype=np.float32)
+        out = np.ascontiguousarray(y[0].transpose(1, 2, 0), dtype=np.float32)
+        if self._signed_range:
+            out = (out + 1.0) * 0.5
+        return out
 
     def device_info(self) -> DeviceInfo:
         if self._info is None:

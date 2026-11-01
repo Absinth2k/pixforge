@@ -25,6 +25,10 @@ class BackendError(RuntimeError):
     """Raised with a user-presentable message."""
 
 
+class OutOfMemory(BackendError):
+    """The device ran out of memory; retry with smaller tiles."""
+
+
 class InferenceBackend(ABC):
     """Runs one image-to-image model on tiles.
 

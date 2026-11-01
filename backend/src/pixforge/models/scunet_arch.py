@@ -32,8 +32,9 @@ def _shifted_mask(hw: torch.Tensor | int, ww: torch.Tensor | int, p: int) -> tor
 class WMSA(nn.Module):
     """(Shifted) window multi-head self attention."""
 
-    def __init__(self, input_dim: int, output_dim: int, head_dim: int, window_size: int,
-                 type: str) -> None:  # noqa: A002 - upstream name
+    def __init__(
+        self, input_dim: int, output_dim: int, head_dim: int, window_size: int, type: str
+    ) -> None:  # noqa: A002 - upstream name
         super().__init__()
         self.input_dim = input_dim
         self.head_dim = head_dim
@@ -88,8 +89,15 @@ class WMSA(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, head_dim: int, window_size: int,
-                 type: str, input_resolution: int) -> None:  # noqa: A002
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        head_dim: int,
+        window_size: int,
+        type: str,
+        input_resolution: int,
+    ) -> None:  # noqa: A002
         super().__init__()
         if input_resolution <= window_size:
             type = "W"
@@ -106,15 +114,23 @@ class Block(nn.Module):
 
 
 class ConvTransBlock(nn.Module):
-    def __init__(self, conv_dim: int, trans_dim: int, head_dim: int, window_size: int,
-                 type: str, input_resolution: int) -> None:  # noqa: A002
+    def __init__(
+        self,
+        conv_dim: int,
+        trans_dim: int,
+        head_dim: int,
+        window_size: int,
+        type: str,
+        input_resolution: int,
+    ) -> None:  # noqa: A002
         super().__init__()
         self.conv_dim = conv_dim
         self.trans_dim = trans_dim
         if input_resolution <= window_size:
             type = "W"
-        self.trans_block = Block(trans_dim, trans_dim, head_dim, window_size, type,
-                                 input_resolution)
+        self.trans_block = Block(
+            trans_dim, trans_dim, head_dim, window_size, type, input_resolution
+        )
         total = conv_dim + trans_dim
         self.conv1_1 = nn.Conv2d(total, total, 1, 1, 0, bias=True)
         self.conv1_2 = nn.Conv2d(total, total, 1, 1, 0, bias=True)
@@ -136,30 +152,44 @@ class SCUNet(nn.Module):
 
     alignment = 64
 
-    def __init__(self, in_nc: int = 3, config: tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4),
-                 dim: int = 64, input_resolution: int = 256) -> None:
+    def __init__(
+        self,
+        in_nc: int = 3,
+        config: tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4),
+        dim: int = 64,
+        input_resolution: int = 256,
+    ) -> None:
         super().__init__()
         hd, ws = 32, 8
 
         def stage(n: int, d: int, res: int) -> list[nn.Module]:
-            return [ConvTransBlock(d, d, hd, ws, "W" if i % 2 == 0 else "SW", res)
-                    for i in range(n)]
+            return [
+                ConvTransBlock(d, d, hd, ws, "W" if i % 2 == 0 else "SW", res) for i in range(n)
+            ]
 
         r = input_resolution
         self.m_head = nn.Sequential(nn.Conv2d(in_nc, dim, 3, 1, 1, bias=False))
-        self.m_down1 = nn.Sequential(*stage(config[0], dim // 2, r),
-                                     nn.Conv2d(dim, 2 * dim, 2, 2, 0, bias=False))
-        self.m_down2 = nn.Sequential(*stage(config[1], dim, r // 2),
-                                     nn.Conv2d(2 * dim, 4 * dim, 2, 2, 0, bias=False))
-        self.m_down3 = nn.Sequential(*stage(config[2], 2 * dim, r // 4),
-                                     nn.Conv2d(4 * dim, 8 * dim, 2, 2, 0, bias=False))
+        self.m_down1 = nn.Sequential(
+            *stage(config[0], dim // 2, r), nn.Conv2d(dim, 2 * dim, 2, 2, 0, bias=False)
+        )
+        self.m_down2 = nn.Sequential(
+            *stage(config[1], dim, r // 2), nn.Conv2d(2 * dim, 4 * dim, 2, 2, 0, bias=False)
+        )
+        self.m_down3 = nn.Sequential(
+            *stage(config[2], 2 * dim, r // 4), nn.Conv2d(4 * dim, 8 * dim, 2, 2, 0, bias=False)
+        )
         self.m_body = nn.Sequential(*stage(config[3], 4 * dim, r // 8))
-        self.m_up3 = nn.Sequential(nn.ConvTranspose2d(8 * dim, 4 * dim, 2, 2, 0, bias=False),
-                                   *stage(config[4], 2 * dim, r // 4))
-        self.m_up2 = nn.Sequential(nn.ConvTranspose2d(4 * dim, 2 * dim, 2, 2, 0, bias=False),
-                                   *stage(config[5], dim, r // 2))
-        self.m_up1 = nn.Sequential(nn.ConvTranspose2d(2 * dim, dim, 2, 2, 0, bias=False),
-                                   *stage(config[6], dim // 2, r))
+        self.m_up3 = nn.Sequential(
+            nn.ConvTranspose2d(8 * dim, 4 * dim, 2, 2, 0, bias=False),
+            *stage(config[4], 2 * dim, r // 4),
+        )
+        self.m_up2 = nn.Sequential(
+            nn.ConvTranspose2d(4 * dim, 2 * dim, 2, 2, 0, bias=False),
+            *stage(config[5], dim, r // 2),
+        )
+        self.m_up1 = nn.Sequential(
+            nn.ConvTranspose2d(2 * dim, dim, 2, 2, 0, bias=False), *stage(config[6], dim // 2, r)
+        )
         self.m_tail = nn.Sequential(nn.Conv2d(dim, in_nc, 3, 1, 1, bias=False))
 
     def forward(self, x0: torch.Tensor) -> torch.Tensor:

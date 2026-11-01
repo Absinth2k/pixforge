@@ -18,8 +18,9 @@ from torch import nn
 class ResBlock(nn.Module):
     def __init__(self, c: int) -> None:
         super().__init__()
-        self.res = nn.Sequential(nn.Conv2d(c, c, 3, 1, 1), nn.ReLU(inplace=False),
-                                 nn.Conv2d(c, c, 3, 1, 1))
+        self.res = nn.Sequential(
+            nn.Conv2d(c, c, 3, 1, 1), nn.ReLU(inplace=False), nn.Conv2d(c, c, 3, 1, 1)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x + self.res(x)
@@ -28,8 +29,9 @@ class ResBlock(nn.Module):
 class QFAttention(nn.Module):
     def __init__(self, c: int) -> None:
         super().__init__()
-        self.res = nn.Sequential(nn.Conv2d(c, c, 3, 1, 1), nn.ReLU(inplace=False),
-                                 nn.Conv2d(c, c, 3, 1, 1))
+        self.res = nn.Sequential(
+            nn.Conv2d(c, c, 3, 1, 1), nn.ReLU(inplace=False), nn.Conv2d(c, c, 3, 1, 1)
+        )
 
     def forward(self, x: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor) -> torch.Tensor:
         return x + gamma[..., None, None] * self.res(x) + beta[..., None, None]
@@ -51,26 +53,43 @@ class FBCNN(nn.Module):
         self.m_head = nn.Conv2d(3, nc[0], 3, 1, 1)
 
         def down(i: int) -> nn.Sequential:
-            return nn.Sequential(*[ResBlock(nc[i]) for _ in range(nb)],
-                                 nn.Conv2d(nc[i], nc[i + 1], 2, 2, 0))
+            return nn.Sequential(
+                *[ResBlock(nc[i]) for _ in range(nb)], nn.Conv2d(nc[i], nc[i + 1], 2, 2, 0)
+            )
 
         self.m_down1, self.m_down2, self.m_down3 = down(0), down(1), down(2)
         self.m_body_encoder = nn.Sequential(*[ResBlock(nc[3]) for _ in range(nb)])
         self.m_body_decoder = nn.Sequential(*[ResBlock(nc[3]) for _ in range(nb)])
 
         def up(i: int) -> nn.ModuleList:
-            return nn.ModuleList([nn.ConvTranspose2d(nc[i + 1], nc[i], 2, 2, 0),
-                                  *[QFAttention(nc[i]) for _ in range(nb)]])
+            return nn.ModuleList(
+                [
+                    nn.ConvTranspose2d(nc[i + 1], nc[i], 2, 2, 0),
+                    *[QFAttention(nc[i]) for _ in range(nb)],
+                ]
+            )
 
         self.m_up3, self.m_up2, self.m_up1 = up(2), up(1), up(0)
         self.m_tail = nn.Conv2d(nc[0], 3, 3, 1, 1)
         self.qf_pred = nn.Sequential(
-            *[ResBlock(nc[3]) for _ in range(nb)], nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(),
-            nn.Linear(512, 512), nn.ReLU(), nn.Linear(512, 512), nn.ReLU(),
-            nn.Linear(512, 1), nn.Sigmoid(),
+            *[ResBlock(nc[3]) for _ in range(nb)],
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1),
+            nn.Sigmoid(),
         )
-        self.qf_embed = nn.Sequential(nn.Linear(1, 512), nn.ReLU(), nn.Linear(512, 512),
-                                      nn.ReLU(), nn.Linear(512, 512), nn.ReLU())
+        self.qf_embed = nn.Sequential(
+            nn.Linear(1, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+        )
         for i, c in ((3, nc[2]), (2, nc[1]), (1, nc[0])):
             setattr(self, f"to_gamma_{i}", nn.Sequential(nn.Linear(512, c), nn.Sigmoid()))
             setattr(self, f"to_beta_{i}", nn.Sequential(nn.Linear(512, c), nn.Tanh()))

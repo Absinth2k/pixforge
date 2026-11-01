@@ -1,0 +1,414 @@
+{
+  "release_url": "https://github.com/Absinth2k/pixforge/releases/download/models-v1/",
+  "models": [
+    {
+      "id": "photo",
+      "kind": "upscale",
+      "name": {
+        "de": "Fotos (Standard)",
+        "en": "Photos (default)"
+      },
+      "description": {
+        "de": "Für echte Fotos mit Rauschen und JPEG-Spuren. Natürliche Details.",
+        "en": "For real photos with noise and JPEG traces. Natural detail."
+      },
+      "scale": 4,
+      "default": true,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – Real_HAT_GAN_SRx4",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT",
+        "weights": "hat/Real_HAT_GAN_SRx4.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "photo.fp16.onnx",
+          "sha256": "3c1f95e10006aa279a6c98b4f7e7251ddb201de0f5dfabeff1a7036e0495f959",
+          "size": 48819914
+        },
+        "fp32": {
+          "file": "photo.fp32.onnx",
+          "sha256": "42b31dff3d22d1c830a97f63514322379bf1a88191f00d07910096fd43cfcc48",
+          "size": 86886151
+        }
+      }
+    },
+    {
+      "id": "photo-sharp",
+      "kind": "upscale",
+      "name": {
+        "de": "Fotos, schärfer",
+        "en": "Photos, sharper"
+      },
+      "description": {
+        "de": "Wie „Fotos“, aber knackiger. Kann bei Haut und Himmel künstlicher wirken.",
+        "en": "Like “Photos”, but crisper. Skin and sky may look more artificial."
+      },
+      "scale": 4,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – Real_HAT_GAN_sharper",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT",
+        "weights": "hat/Real_HAT_GAN_sharper.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "photo-sharp.fp16.onnx",
+          "sha256": "d033d652ef028d3b9bbe68a51b09d0495931f9c3fee7690a0bcace183d98ed86",
+          "size": 48813250
+        },
+        "fp32": {
+          "file": "photo-sharp.fp32.onnx",
+          "sha256": "fd56c0eb4b91af5ccb525a5d054500bc396c3eaf847268b092831c644fa0c864",
+          "size": 86886160
+        }
+      }
+    },
+    {
+      "id": "clean-x2",
+      "kind": "upscale",
+      "name": {
+        "de": "Saubere Bilder 2×",
+        "en": "Clean images 2×"
+      },
+      "description": {
+        "de": "Für rauschfreie Bilder, Grafiken und Scans. Sehr originalgetreu.",
+        "en": "For noise-free images, graphics and scans. Very faithful."
+      },
+      "scale": 2,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – HAT_SRx2_ImageNet-pretrain",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT",
+        "weights": "hat/HAT_SRx2_ImageNet-pretrain.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "clean-x2.fp16.onnx",
+          "sha256": "609f180ad15f636767f68b8d1f5064ab0cbee173a2083a15f7a1e5c9491c0560",
+          "size": 46436415
+        },
+        "fp32": {
+          "file": "clean-x2.fp32.onnx",
+          "sha256": "41d295f37f9819efecfc0ee535efbb557a89b5cb8c1e00ddd07696bd252ba41b",
+          "size": 86294835
+        }
+      }
+    },
+    {
+      "id": "clean-x3",
+      "kind": "upscale",
+      "name": {
+        "de": "Saubere Bilder 3×",
+        "en": "Clean images 3×"
+      },
+      "description": {
+        "de": "Für rauschfreie Bilder, Grafiken und Scans. Sehr originalgetreu.",
+        "en": "For noise-free images, graphics and scans. Very faithful."
+      },
+      "scale": 3,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – HAT_SRx3_ImageNet-pretrain",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT",
+        "weights": "hat/HAT_SRx3_ImageNet-pretrain.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "clean-x3.fp16.onnx",
+          "sha256": "c373f1be23416097658212e36771c3ce064684acb9b6eaf0c6f4be77e0ffc577",
+          "size": 46805695
+        },
+        "fp32": {
+          "file": "clean-x3.fp32.onnx",
+          "sha256": "17149a4c604d0d40c4fdd5be883c9d9bddebeacf68a322daf634d4a3c4748960",
+          "size": 87033395
+        }
+      }
+    },
+    {
+      "id": "clean-x4",
+      "kind": "upscale",
+      "name": {
+        "de": "Saubere Bilder 4×",
+        "en": "Clean images 4×"
+      },
+      "description": {
+        "de": "Für rauschfreie Bilder, Grafiken und Scans. Sehr originalgetreu.",
+        "en": "For noise-free images, graphics and scans. Very faithful."
+      },
+      "scale": 4,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – HAT_SRx4_ImageNet-pretrain",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT",
+        "weights": "hat/HAT_SRx4_ImageNet-pretrain.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "clean-x4.fp16.onnx",
+          "sha256": "38e4359fcfb3aafc2c4df9c01a1798c084599b7881284af1cf748ac15583c307",
+          "size": 46732507
+        },
+        "fp32": {
+          "file": "clean-x4.fp32.onnx",
+          "sha256": "02dc5eb080f64b60e696e3c051abab56506f14e2ef7712a993dd20b934daadee",
+          "size": 86886163
+        }
+      }
+    },
+    {
+      "id": "max-x2",
+      "kind": "upscale",
+      "name": {
+        "de": "Maximale Qualität 2×",
+        "en": "Maximum quality 2×"
+      },
+      "description": {
+        "de": "Größtes Modell für saubere Bilder. Etwa doppelt so langsam.",
+        "en": "Largest model for clean images. About twice as slow."
+      },
+      "scale": 2,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – HAT-L_SRx2_ImageNet-pretrain",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT-L",
+        "weights": "hat/HAT-L_SRx2_ImageNet-pretrain.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "max-x2.fp16.onnx",
+          "sha256": "d8b94faba5ff51a8980f4842ed551e92ac2b71c549e2cb483d25c2f118eb9c19",
+          "size": 90715594
+        },
+        "fp32": {
+          "file": "max-x2.fp32.onnx",
+          "sha256": "7181bde072c58249a85b6295535a872f5e1cd09277f9851f85e422be2297d985",
+          "size": 168687425
+        }
+      }
+    },
+    {
+      "id": "max-x4",
+      "kind": "upscale",
+      "name": {
+        "de": "Maximale Qualität 4×",
+        "en": "Maximum quality 4×"
+      },
+      "description": {
+        "de": "Größtes Modell für saubere Bilder. Etwa doppelt so langsam.",
+        "en": "Largest model for clean images. About twice as slow."
+      },
+      "scale": 4,
+      "license": "Apache-2.0",
+      "origin": "XPixelGroup/HAT – HAT-L_SRx4_ImageNet-pretrain",
+      "build": {
+        "arch": "hat",
+        "variant": "HAT-L",
+        "weights": "hat/HAT-L_SRx4_ImageNet-pretrain.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "max-x4.fp16.onnx",
+          "sha256": "4e1ab53b8cc0283f1b01e65837e219931e519ff7e3e4124f95bf91bac08cd254",
+          "size": 90398795
+        },
+        "fp32": {
+          "file": "max-x4.fp32.onnx",
+          "sha256": "3580a62adc95e4e2c1513001a874f44eab8926c74228fa0eddb8767e2c5c4ec7",
+          "size": 169278751
+        }
+      }
+    },
+    {
+      "id": "denoise",
+      "kind": "denoise",
+      "name": {
+        "de": "Rauschminderung",
+        "en": "Noise reduction"
+      },
+      "description": {
+        "de": "Entfernt Kamera- und Handyrauschen vor dem Hochskalieren.",
+        "en": "Removes camera and phone noise before upscaling."
+      },
+      "scale": 1,
+      "default": true,
+      "license": "Apache-2.0",
+      "origin": "cszn/SCUNet – scunet_color_real_psnr",
+      "build": {
+        "arch": "scunet",
+        "weights": "denoise/scunet_color_real_psnr.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "denoise.fp16.onnx",
+          "sha256": "793d7eece445bedb246633801203c032c101d47bf8215265ea97e7e5575870bf",
+          "size": 39851447
+        },
+        "fp32": {
+          "file": "denoise.fp32.onnx",
+          "sha256": "a824ad70c3adeb36423744df9f575b4ca9c13fa37b6cbd3c67cfef48bd0a4142",
+          "size": 75130191
+        }
+      }
+    },
+    {
+      "id": "denoise-gan",
+      "kind": "denoise",
+      "name": {
+        "de": "Rauschminderung (texturbetont)",
+        "en": "Noise reduction (texture)"
+      },
+      "description": {
+        "de": "Erhält mehr Struktur, kann aber feine Muster erfinden.",
+        "en": "Keeps more texture, but may invent fine patterns."
+      },
+      "scale": 1,
+      "license": "Apache-2.0",
+      "origin": "cszn/SCUNet – scunet_color_real_gan",
+      "build": {
+        "arch": "scunet",
+        "weights": "denoise/scunet_color_real_gan.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "denoise-gan.fp16.onnx",
+          "sha256": "4717adc349a62182d5436b1db0149fe5f03aa5b1924c319e80c0bb948189fc02",
+          "size": 39851450
+        },
+        "fp32": {
+          "file": "denoise-gan.fp32.onnx",
+          "sha256": "30f0ef3b7e0b59e82edcaaaf7225c31b97ce8b3ad17fb1a5d1ec26b07d896591",
+          "size": 75130194
+        }
+      }
+    },
+    {
+      "id": "jpeg",
+      "kind": "jpeg",
+      "name": {
+        "de": "JPEG-Artefakte entfernen",
+        "en": "Remove JPEG artifacts"
+      },
+      "description": {
+        "de": "Glättet Blockbildung und Ringe stark komprimierter JPEGs.",
+        "en": "Smooths blocking and ringing of heavily compressed JPEGs."
+      },
+      "scale": 1,
+      "license": "Apache-2.0",
+      "origin": "jiaxi-jiang/FBCNN – fbcnn_color",
+      "build": {
+        "arch": "fbcnn",
+        "weights": "denoise/fbcnn_color.pth"
+      },
+      "files": {
+        "fp16": {
+          "file": "jpeg.fp16.onnx",
+          "sha256": "c0a7fb47eeb618ddb23b772c3af89db4cddf6676b306b89c11da546616bea9d1",
+          "size": 143891059
+        },
+        "fp32": {
+          "file": "jpeg.fp32.onnx",
+          "sha256": "0161129fc15612aa5d02c8f22cd04307a0f686367113d86d65b2e545bd55dde6",
+          "size": 287695353
+        }
+      }
+    },
+    {
+      "id": "face",
+      "kind": "face",
+      "name": {
+        "de": "Gesichter (RestoreFormer++)",
+        "en": "Faces (RestoreFormer++)"
+      },
+      "description": {
+        "de": "Stellt Gesichter wieder her. Standardmodell, frei lizenziert.",
+        "en": "Restores faces. Default model, permissively licensed."
+      },
+      "scale": 1,
+      "default": true,
+      "license": "Apache-2.0",
+      "origin": "wzhouxiff/RestoreFormerPlusPlus",
+      "build": {
+        "arch": "restoreformer",
+        "weights": "faces/RestoreFormerPlusPlus.ckpt",
+        "precisions": [
+          "fp32"
+        ]
+      },
+      "files": {
+        "fp32": {
+          "file": "face.fp32.onnx",
+          "sha256": "8a512897cae76a542e5e99a452f31329b503278bdc27efd46299260611d3d5d9",
+          "size": 294264564
+        }
+      }
+    },
+    {
+      "id": "face-gfpgan",
+      "kind": "face",
+      "name": {
+        "de": "Gesichter (GFPGAN 1.4)",
+        "en": "Faces (GFPGAN 1.4)"
+      },
+      "description": {
+        "de": "Alternative mit glatterem Ergebnis. Nur für nicht-kommerzielle Nutzung (NVIDIA-Lizenzteile).",
+        "en": "Alternative with smoother results. Non-commercial use only (NVIDIA license parts)."
+      },
+      "scale": 1,
+      "license": "Apache-2.0 + NVIDIA Source Code License (non-commercial)",
+      "noncommercial": true,
+      "origin": "TencentARC/GFPGAN – GFPGANv1.4",
+      "build": {
+        "arch": "gfpgan",
+        "weights": "faces/GFPGANv1.4.pth",
+        "precisions": [
+          "fp32"
+        ]
+      },
+      "files": {
+        "fp32": {
+          "file": "face-gfpgan.fp32.onnx",
+          "sha256": "0b055327a8c0b3f2567691a2353dca36aca141120852fec9f5a013428c4f8391",
+          "size": 340579093
+        }
+      }
+    },
+    {
+      "id": "face-detect",
+      "kind": "detect",
+      "name": {
+        "de": "Gesichtserkennung (YuNet)",
+        "en": "Face detection (YuNet)"
+      },
+      "description": {
+        "de": "Findet Gesichter und ihre Merkmale.",
+        "en": "Finds faces and landmarks."
+      },
+      "scale": 1,
+      "default": true,
+      "license": "MIT",
+      "origin": "opencv/opencv_zoo – face_detection_yunet_2023mar",
+      "build": {
+        "arch": "copy",
+        "weights": "faces/face_detection_yunet_2023mar.onnx",
+        "precisions": [
+          "fp32"
+        ]
+      },
+      "files": {
+        "fp32": {
+          "file": "face-detect.fp32.onnx",
+          "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+          "size": 232589
+        }
+      }
+    }
+  ]
+}

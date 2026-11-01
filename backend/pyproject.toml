@@ -10,6 +10,9 @@ dependencies = [
     "opencv-python-headless>=4.10",
     "onnxruntime-directml>=1.20",
     "truststore>=0.10",
+    "pi-heif>=1.0",
+    "tifffile>=2025.1",
+    "imagecodecs>=2025.3",
 ]
 
 [project.optional-dependencies]
@@ -58,3 +61,4 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]

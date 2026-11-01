@@ -46,6 +46,21 @@ class ExportSpec:
     extra_dynamic: dict[str, dict[int, str]] = field(default_factory=dict)
     output_names: tuple[str, ...] = ("output",)
     calib_size: int = CALIB_SIZE
+    #: fixed square input size (face restorers); None = dynamic height/width
+    fixed_size: int | None = None
+    #: value range of input/output images: "0..1" or "-1..1"
+    value_range: str = "0..1"
+
+
+class _GFPGANInference(torch.nn.Module):
+    """Deterministic GFPGAN forward (fixed noise buffers), image output only."""
+
+    def __init__(self, net: torch.nn.Module) -> None:
+        super().__init__()
+        self.net = net
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x, return_rgb=False, randomize_noise=False)[0]
 
 
 def _load(weights: Path) -> dict[str, torch.Tensor]:
@@ -61,7 +76,10 @@ def build_spec(arch: str, weights: Path, variant: str = "HAT", scale: int = 4) -
         hat = HAT(hat_config(variant, scale)).eval()
         load_hat_state_dict(hat, torch.load(weights, map_location="cpu", weights_only=True))
         return ExportSpec(
-            hat, scale, 16, "Apache-2.0 (XPixelGroup/HAT)",
+            hat,
+            scale,
+            16,
+            "Apache-2.0 (XPixelGroup/HAT)",
             extra_inputs={"attn_mask": lambda t: shifted_window_mask(t, t, 16)},
             extra_dynamic={"attn_mask": {0: "num_windows"}},
         )
@@ -77,9 +95,49 @@ def build_spec(arch: str, weights: Path, variant: str = "HAT", scale: int = 4) -
         fb = FBCNN().eval()
         fb.load_state_dict(_load(weights), strict=True)
         return ExportSpec(
-            fb, 1, 8, "Apache-2.0 (jiaxi-jiang/FBCNN)",
+            fb,
+            1,
+            8,
+            "Apache-2.0 (jiaxi-jiang/FBCNN)",
             extra_inputs={"qf": lambda t: np.full((1, 1), -1.0, np.float32)},
             output_names=("output", "qf_pred"),
+        )
+    if arch == "restoreformer":
+        from pixforge.models.restoreformer_arch import RestoreFormerPP, load_restoreformer_pp
+
+        rf = RestoreFormerPP().eval()
+        load_restoreformer_pp(rf, torch.load(weights, map_location="cpu", weights_only=True))
+        return ExportSpec(
+            rf,
+            1,
+            512,
+            "Apache-2.0 (wzhouxiff/RestoreFormerPlusPlus)",
+            fixed_size=512,
+            value_range="-1..1",
+        )
+    if arch == "gfpgan":
+        from pixforge.models.gfpgan_arch import GFPGANv1Clean
+
+        gf = GFPGANv1Clean(
+            out_size=512,
+            num_style_feat=512,
+            channel_multiplier=2,
+            decoder_load_path=None,
+            fix_decoder=False,
+            num_mlp=8,
+            input_is_latent=True,
+            different_w=True,
+            narrow=1,
+            sft_half=True,
+        )
+        gf.load_state_dict(_load(weights), strict=True)
+        return ExportSpec(
+            _GFPGANInference(gf.eval()),
+            1,
+            512,
+            "Apache-2.0 + NVIDIA Source Code License (non-commercial) (TencentARC/GFPGAN)",
+            fixed_size=512,
+            value_range="-1..1",
         )
     raise ValueError(f"unknown arch {arch!r}")
 
@@ -97,16 +155,22 @@ def export(
     h and w are dynamic (multiples of ``spec.alignment``); ``tile`` only sets the trace shape.
     """
     out.parent.mkdir(parents=True, exist_ok=True)
+    if spec.fixed_size:
+        tile = spec.fixed_size
     names = ["input", *spec.extra_inputs]
     args = (
         torch.rand(1, 3, tile, tile),
         *(torch.from_numpy(np.array(f(tile))) for f in spec.extra_inputs.values()),
     )
-    dynamic = {
-        "input": {2: "height", 3: "width"},
-        "output": {2: "out_height", 3: "out_width"},
-        **spec.extra_dynamic,
-    }
+    dynamic = (
+        {}
+        if spec.fixed_size
+        else {
+            "input": {2: "height", 3: "width"},
+            "output": {2: "out_height", 3: "out_width"},
+            **spec.extra_dynamic,
+        }
+    )
     with torch.no_grad():
         torch.onnx.export(
             spec.model,
@@ -183,7 +247,9 @@ def calibration_inputs(
     return [x[None] for x in out]
 
 
-def activation_peaks(proto: onnx.ModelProto, feeds: list[dict[str, np.ndarray]]) -> dict[str, float]:
+def activation_peaks(
+    proto: onnx.ModelProto, feeds: list[dict[str, np.ndarray]]
+) -> dict[str, float]:
     """Max |value| per tensor name over the feeds, by running the float32 graph on the CPU."""
     probe = onnx.ModelProto()
     probe.CopyFrom(proto)
