@@ -366,6 +366,9 @@ export = [
     { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
 ]
+raw = [
+    { name = "rawpy" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -382,10 +385,11 @@ requires-dist = [
     { name = "onnxscript", marker = "extra == 'export'", specifier = ">=0.1" },
     { name = "opencv-python-headless", specifier = ">=4.10" },
     { name = "pillow", specifier = ">=11.0" },
+    { name = "rawpy", marker = "extra == 'raw'", specifier = ">=0.24" },
     { name = "torch", marker = "extra == 'export'", specifier = ">=2.5", index = "https://download.pytorch.org/whl/cpu" },
     { name = "truststore", specifier = ">=0.10" },
 ]
-provides-extras = ["export"]
+provides-extras = ["raw", "export"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -449,6 +453,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/79/42/bb4641652e58dedeac2ec51abc1f8cae4fee4ec63899a0999016229a0f2a/pytest-9.2.0.tar.gz", hash = "sha256:97c4f3b1f3c7414aa36465e09b8220f1d03627993bd51b1282e193753c80557b", size = 1797555, upload-time = "2026-10-27T21:30:20.728Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl", hash = "sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588", size = 411776, upload-time = "2026-10-27T21:30:19.131Z" },
+]
+
+[[package]]
+name = "rawpy"
+version = "0.28.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/17/d9b34cdf64b1377e4f9d070375674276a5f68954741849592eda81c67557/rawpy-0.28.0.tar.gz", hash = "sha256:3176c865b786dfec4e54251759f98e5a00733035f1f256e8c09909c59b5353d2", size = 564119, upload-time = "2026-10-31T19:49:03.507Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/4e/20001556bb07f74517b0c105b7e3f5bb383a361edfcf3ea102d73066e40b/rawpy-0.28.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:60e4c82d2dbce6ae20f95d0894bcacf355d32b783cd017c374c800dfc4a0d9b3", size = 2060964, upload-time = "2026-10-31T19:48:27.688Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/f1/113ab0ff2c8645829ab680e3831c5c120dbdf42ada18b5d204d9f1d5b811/rawpy-0.28.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6f2b96ece54ca035ef46815ff169301e714f690f39a6cbdd87f74451bd1b0fa6", size = 2960655, upload-time = "2026-10-31T19:48:29.385Z" },
+    { url = "https://files.pythonhosted.org/packages/53/36/4971343b130ad42cc0a3e98f063fb12b2c462f425e3605aedd534d970cf8/rawpy-0.28.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:68f3f4a74973f0d27d15531653b0be8e4f3ec220225a5baace6de353163ff4a2", size = 2958826, upload-time = "2026-10-31T19:48:31.656Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/84/7437ca1589909a78831ab94c6501e257077e62da95ed2fdffbf84e01f1eb/rawpy-0.28.0-cp312-cp312-win_amd64.whl", hash = "sha256:52174204641ef54bb5ad139d0a7032e72f71e256ed85b1de4c8853116fe23eb4", size = 923183, upload-time = "2026-10-31T19:48:33.628Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/b6/00dd54a6bc8dd368c091f24abf793dccad431d8a7f530656edc295e668cb/rawpy-0.28.0-cp312-cp312-win_arm64.whl", hash = "sha256:25efd9ca3e374ad0174331ca6cda08d00abebfc05c174704235ef1176e94a3a4", size = 936446, upload-time = "2026-10-31T19:48:35.278Z" },
 ]
 
 [[package]]

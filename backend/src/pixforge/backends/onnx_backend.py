@@ -83,8 +83,12 @@ class OnnxBackend(InferenceBackend):
         self._session: ort.InferenceSession | None = None
         self._info: DeviceInfo | None = None
         self._needs_mask = False
+        self._needs_qf = False
         self._window = 16
         self._input_dtype = np.float32
+        #: FBCNN only: 1 - jpeg_quality/100, or -1 for per-tile automatic estimation
+        self.jpeg_qf = -1.0
+        self.last_extra_outputs: list[np.ndarray] = []
 
     # -- InferenceBackend -------------------------------------------------
     def load(self, model_id: str | Path) -> None:
@@ -117,9 +121,12 @@ class OnnxBackend(InferenceBackend):
         self._window = int(meta.get("pixforge.window", "16"))
         names = [i.name for i in self._session.get_inputs()]
         self._needs_mask = "attn_mask" in names
-        self.alignment = self._window if self._needs_mask else 1
+        self._needs_qf = "qf" in names
+        default_align = self._window if self._needs_mask else 1
+        self.alignment = int(meta.get("pixforge.align", default_align))
         in_type = self._session.get_inputs()[0].type
         self._input_dtype = np.float16 if "float16" in in_type else np.float32
+        self.last_extra_outputs: list[np.ndarray] = []
 
     def run_tile(self, tile: np.ndarray) -> np.ndarray:
         if self._session is None:
@@ -135,8 +142,12 @@ class OnnxBackend(InferenceBackend):
             feeds["attn_mask"] = shifted_window_mask(h, w, self._window).astype(
                 self._input_dtype, copy=False
             )
+        if self._needs_qf:
+            # JPEG quality as 1 - q/100; negative = let the model estimate per tile.
+            feeds["qf"] = np.full((1, 1), self.jpeg_qf, dtype=np.float32)
         try:
-            y = self._session.run(None, feeds)[0]
+            y, *extra = self._session.run(None, feeds)
+            self.last_extra_outputs = extra
         except Exception as exc:
             msg = str(exc)
             if "887A0005" in msg or "887A0006" in msg or "OUTOFMEMORY" in msg.upper():
