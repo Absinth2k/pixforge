@@ -104,9 +104,36 @@ sichtbarer Fokusrahmen in Akzentfarbe, Tastaturbedienung für alle Aktionen (Sho
 Etappe 4), Mindestschrift 11 px, Kontraste siehe oben, „Bewegung reduzieren“ von Windows wird
 respektiert. Oberfläche auf Deutsch und Englisch, Sprache nach System.
 
-## Offene Punkte für die Freigabe
+## Aufgabe, Größe und Ausschnitt (nach Rückmeldung ergänzt)
 
-1. Akzentfarbe Glut (#F2A541) oder eine der Alternativen auf der Leinwand (Koralle #E8784A,
-   Petrol #5FB3A8, Violett #9D8CF2).
-2. Logo-Idee „glühende Scheibe mit Pixeltreppe“.
-3. Dunkel als Standard, Hell als Option.
+- **Aufgabe:** Umschalter „Vergrößern | Nur entrauschen“ oben im Größen-Abschnitt.
+  *Nur entrauschen* behält die Größe, nutzt kein Hochskalier-Modell (die Modell-Kacheln werden
+  ausgegraut), dauert Sekunden (≈ 0,4 s/MP) und erfindet keine Details. Ist das Bild schon
+  entrauscht, sagt Pixforge das, statt eine unveränderte Kopie zu speichern.
+- **1× = KI-Schärfen:** rechnet intern 4× und verkleinert wieder. Damit niemand sich über die
+  Dauer wundert, erscheint bei 1× ein Hinweiskasten („dauert so lange wie 4×, nur Rauschen
+  entfernen geht mit ‚Nur entrauschen‘ in Sekunden“) und die Zeitschätzung trägt „(wie 4×)“.
+- **6×:** im Profi-Modus immer wählbar, mit Hinweis „Details werden teilweise neu erzeugt,
+  originalgetreu höchstens 4×“ sowie Warnung zu Zeit, Arbeitsspeicher und Dateigröße.
+  Im Einfach-Modus nur, wenn das Ergebnis unter etwa 100 MP bleibt (alte Fotos, kleine Bilder).
+  Ein 12-MP-Handyfoto ergäbe bei 6× rund 440 MP und bräuchte 6–7 Minuten.
+- **Einfach-Modus**, Frage „Was soll passieren?“: Karten *Gleiche Größe* (nur Rauschen weg),
+  *2×*, *4×*, *6×* (nur wenn sinnvoll).
+- **Ausschnitt:** Werkzeug „Ausschnitt“ in der Werkzeugleiste. Rahmen mit Drittel-Raster und
+  Anfassern, abgedunkelte Umgebung, Seitenverhältnisse Frei, 1:1, 4:3, 3:2, 16:9, 10×15,
+  Anzeige „Ausschnitt 234 × 299 px → 936 × 1.196 px“. Gerechnet wird nur der Ausschnitt plus
+  32 px echter Umgebung (danach abgeschnitten, keine Randartefakte). Ergebnis ist ein **neues
+  Bild** `…_pixforge_ausschnitt.jpg`, das Original bleibt unberührt. Im Einfach-Modus als Link
+  „Nur einen Ausschnitt“. Backend: `Settings.crop`, CLI `--crop X,Y,B,H`.
+
+## Copyright
+
+„© 2026 Andre Strahl“ steht in der Statusleiste des Hauptfensters (rechts außen), auf dem
+Startbildschirm neben der Versionsnummer, im Einfach-Modus unter den Links und im Info-Dialog
+(Etappe 4); dazu im Installer und in `LICENSE`/`NOTICE` des Repos.
+
+## Freigabe
+
+Freigegeben am 01.11.2026: Akzent Glut (#F2A541), Logo „glühende Scheibe mit Pixeltreppe“,
+Dunkel als Standard, Hell als Option. Ergänzt um „Nur entrauschen“, gekennzeichnetes
+1×-KI-Schärfen, 6×-Regel, Ausschnitt-Werkzeug und Copyright.
