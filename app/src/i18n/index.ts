@@ -3,7 +3,19 @@ import { initReactI18next } from 'react-i18next'
 import de from './de.json'
 import en from './en.json'
 
-const lang = (navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en'
+export const LANG_KEY = 'pixforge.lang'
+
+function storedLang(): string | null {
+  try {
+    return localStorage.getItem(LANG_KEY)
+  } catch {
+    return null
+  }
+}
+
+/** Chosen in the about dialog, else the Windows language. */
+const lang =
+  storedLang() ?? ((navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en')
 
 void i18n.use(initReactI18next).init({
   resources: { de: { translation: de }, en: { translation: en } },
@@ -13,4 +25,15 @@ void i18n.use(initReactI18next).init({
 })
 
 document.documentElement.lang = lang
+
+export function setLanguage(l: 'de' | 'en'): void {
+  void i18n.changeLanguage(l)
+  document.documentElement.lang = l
+  try {
+    localStorage.setItem(LANG_KEY, l)
+  } catch {
+    /* private mode: only for this session */
+  }
+}
+
 export default i18n

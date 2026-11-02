@@ -164,6 +164,7 @@
     "privacy": "Privacy",
     "privacyText": "Images never leave this computer. No telemetry; internet only for model downloads and updates.",
     "source": "Source code",
-    "licenses": "Licences"
+    "licenses": "Licences",
+    "language": "Language"
   }
 }

@@ -1,14 +1,15 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { setLanguage } from '@/i18n'
 import { useStore } from '@/state/store'
-import { Logo, Switch } from './ui'
+import { Logo, Segmented, Switch } from './ui'
 
 const REPO = 'https://github.com/Absinth2k/pixforge'
 
 /** Version, automatic updates, device, licences. Opened from the title bar. */
 export function AboutDialog() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const open = useStore((s) => s.aboutOpen)
   const update = useStore((s) => s.update)
   const health = useStore((s) => s.health)
@@ -80,6 +81,19 @@ export function AboutDialog() {
           </div>
         </div>
         <p className="mt-4 text-[13px] leading-relaxed text-text2">{t('about.text')}</p>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <span className="text-[13px] font-medium">{t('about.language')}</span>
+          <Segmented<'de' | 'en'>
+            label={t('about.language')}
+            value={i18n.language === 'en' ? 'en' : 'de'}
+            onChange={(l) => setLanguage(l)}
+            options={[
+              { value: 'de', label: 'Deutsch' },
+              { value: 'en', label: 'English' }
+            ]}
+          />
+        </div>
 
         <div className="mt-4 rounded-tile border border-line p-3.5">
           <div className="flex items-center justify-between gap-3">

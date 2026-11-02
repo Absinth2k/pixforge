@@ -70,6 +70,12 @@ test('start screen, load an image, preview renders', async () => {
       page.getByRole('heading', { name: /Bilder hierher ziehen|Drop images here/ })
     ).toBeVisible()
     await expect(page.getByText(/DirectML|Prozessor|processor/)).toBeVisible()
+    // language switch in the about dialog
+    await page.getByTestId('about-button').click()
+    await page.getByRole('button', { name: 'English' }).click()
+    await expect(page.getByRole('heading', { name: 'Drop images here' })).toBeVisible()
+    await page.getByRole('button', { name: 'Deutsch' }).click()
+    await page.keyboard.press('Escape')
     await openFiles(app, [syntheticImage()])
     await expect(page.getByRole('option', { name: /testbild\.png/ })).toBeVisible()
     const result = page.locator('img[alt^="Pixforge"]')

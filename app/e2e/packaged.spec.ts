@@ -95,6 +95,13 @@ test('packaged app: setup, about, preview', async () => {
     await expect(page.getByText(/DirectML|Prozessor|processor/)).toBeVisible({ timeout: 120_000 })
     await page.getByTestId('about-button').click()
     await expect(page.getByTestId('about-version')).toHaveText(/1\.0\.0/)
+    if (process.env['PIXFORGE_CHECK_UPDATE']) {
+      // the installed version must find itself as the newest release on GitHub
+      await page.getByRole('button', { name: /Jetzt prüfen|Check now/ }).click()
+      await expect(page.getByText(/Pixforge ist aktuell|Pixforge is up to date/)).toBeVisible({
+        timeout: 60_000
+      })
+    }
     await page.screenshot({ path: 'test-results/packaged-about.png' })
     await page.keyboard.press('Escape')
     // drop a file the way Explorer's "open with" does: as a second instance

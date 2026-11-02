@@ -164,6 +164,7 @@
     "privacy": "Datenschutz",
     "privacyText": "Bilder verlassen den Computer nie. Keine Telemetrie; Internet nur für Modell-Downloads und Updates.",
     "source": "Quellcode",
-    "licenses": "Lizenzen"
+    "licenses": "Lizenzen",
+    "language": "Sprache"
   }
 }

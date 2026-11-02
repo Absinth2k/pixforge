@@ -41,8 +41,9 @@ nsis:
   artifactName: Pixforge-Setup-${version}.${ext}
   # models (%LOCALAPPDATA%\Pixforge) and settings stay when uninstalling
   deleteAppDataOnUninstall: false
+# Updates: the installed app reads latest.yml of the newest (non-pre-)release. GitHub's
+# /releases/latest no longer answers the JSON request of electron-updater's "github"
+# provider, the permanent download link of the latest release works everywhere.
 publish:
-  provider: github
-  owner: Absinth2k
-  repo: pixforge
-  releaseType: release
+  provider: generic
+  url: https://github.com/Absinth2k/pixforge/releases/latest/download
