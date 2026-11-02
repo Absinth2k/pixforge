@@ -162,6 +162,9 @@ export interface Job {
   id: string
   image_id: string
   name: string
+  /** only a crop of the image is exported */
+  crop?: boolean
+  task?: Task
   status: JobStatus
   stage: string
   progress: number

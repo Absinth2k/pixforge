@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { useStore } from '@/state/store'
 import { formatDuration } from './ui'
 
+const ACTIVE = new Set(['running', 'queued'])
+
 export function StatusBar() {
   const { t, i18n } = useTranslation()
   const api = useStore((s) => s.api)
@@ -11,10 +13,12 @@ export function StatusBar() {
   const set = useStore((s) => s.set)
 
   const all = Object.values(jobs)
-  const active = all.filter((j) => j.status === 'running' || j.status === 'queued')
   const running = all.find((j) => j.status === 'running')
-  const batchTotal =
-    active.length + all.filter((j) => j.status === 'done' && j.seconds !== null).length
+  // "image n of m" counts the jobs of the current run only (see store.batchIds)
+  const batchIds = useStore((s) => s.batchIds)
+  const batch = batchIds.map((id) => jobs[id]).filter(Boolean)
+  const batchTotal = batch.length
+  const batchDone = batch.filter((j) => !ACTIVE.has(j.status)).length
   const dev = health?.device
   const deviceText = !api
     ? t('status.starting')
@@ -62,7 +66,8 @@ export function StatusBar() {
       {running && (
         <>
           <span>
-            {t('status.job', { n: batchTotal - active.length + 1, total: batchTotal })}
+            {t('status.job', { n: batchDone + 1, total: batchTotal })}
+            {`: ${running.name}${running.crop ? ` (${t('status.crop')})` : ''}`}
             {running.eta_s != null
               ? ` · ${t('status.remaining', { t: formatDuration(running.eta_s, i18n.language) })}`
               : ''}

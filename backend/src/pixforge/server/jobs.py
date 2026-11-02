@@ -49,6 +49,8 @@ class Job:
             "id": self.id,
             "image_id": self.image_id,
             "name": self.name,
+            "crop": self.settings.crop is not None,
+            "task": self.settings.task,
             "status": self.status,
             "stage": self.stage,
             "progress": round(self.progress, 4),

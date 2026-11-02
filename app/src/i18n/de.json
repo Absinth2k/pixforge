@@ -112,7 +112,8 @@
     "remaining": "noch ca. {{t}}",
     "job": "Bild {{n}} von {{total}}",
     "exported": "Gespeichert: {{name}}",
-    "showInFolder": "Im Ordner zeigen"
+    "showInFolder": "Im Ordner zeigen",
+    "crop": "Ausschnitt"
   },
   "errors": {
     "backendTitle": "Die Bildverarbeitung läuft nicht",

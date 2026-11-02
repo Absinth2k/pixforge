@@ -112,7 +112,8 @@
     "remaining": "about {{t}} left",
     "job": "Image {{n}} of {{total}}",
     "exported": "Saved: {{name}}",
-    "showInFolder": "Show in folder"
+    "showInFolder": "Show in folder",
+    "crop": "crop"
   },
   "errors": {
     "backendTitle": "Image processing is not running",

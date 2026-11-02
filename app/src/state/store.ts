@@ -63,6 +63,8 @@ interface State {
   toast: { text: string; path?: string; kind: 'info' | 'error' } | null
   pendingPaths: string[]
   loadingModel: string | null
+  /** jobs submitted since the queue was last empty ("image n of m") */
+  batchIds: string[]
 
   connect(): Promise<void>
   addPaths(paths: string[]): Promise<void>
@@ -108,6 +110,7 @@ export const useStore = create<State>((set, get) => ({
   toast: null,
   pendingPaths: [],
   loadingModel: null,
+  batchIds: [],
 
   async connect() {
     const info = await window.pixforge.getBackend()
@@ -276,7 +279,13 @@ export const useStore = create<State>((set, get) => ({
         const job = await api.submitJob(id, st)
         jobKeys.set(job.id, key)
         queued++
-        set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }))
+        set((s) => {
+          const running = s.batchIds.some((b) => s.jobs[b] && ACTIVE.has(s.jobs[b].status))
+          return {
+            jobs: { ...s.jobs, [job.id]: job },
+            batchIds: running ? [...s.batchIds, job.id] : [job.id]
+          }
+        })
       }
       if (already && !queued) {
         set({ toast: { text: i18n.t('toolbar.alreadyQueued'), kind: 'info' } })
