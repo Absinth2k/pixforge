@@ -1,7 +1,7 @@
 {
   "name": "pixforge",
   "productName": "Pixforge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lokaler KI-Upscaler für Fotos",
   "author": "Andre Strahl",
   "license": "Apache-2.0",

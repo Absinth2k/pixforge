@@ -11,7 +11,8 @@ import { join, resolve } from 'node:path'
 import { app } from 'electron'
 import type { BackendInfo } from './api'
 
-const READY_TIMEOUT_MS = 90_000
+// generous: on a fresh PC the antivirus scans the new backend files on the very first start
+const READY_TIMEOUT_MS = 180_000
 
 let child: ChildProcess | null = null
 let current: Promise<BackendInfo> | null = null

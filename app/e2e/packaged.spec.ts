@@ -94,7 +94,9 @@ test('packaged app: setup, about, preview', async () => {
     }
     await expect(page.getByText(/DirectML|Prozessor|processor/)).toBeVisible({ timeout: 120_000 })
     await page.getByTestId('about-button').click()
-    await expect(page.getByTestId('about-version')).toHaveText(/1\.0\.0/)
+    await expect(page.getByTestId('about-version')).toHaveText(
+      new RegExp(process.env['PIXFORGE_EXPECT_VERSION'] ?? '\\d+\\.\\d+\\.\\d+')
+    )
     if (process.env['PIXFORGE_CHECK_UPDATE']) {
       // the installed version must find itself as the newest release on GitHub
       await page.getByRole('button', { name: /Jetzt prüfen|Check now/ }).click()
