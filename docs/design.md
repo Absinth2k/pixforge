@@ -71,7 +71,8 @@ Einfach-Modus eine Stufe größer: Text 14–15 px, Hauptknopf 17/700, Schalter 
 ```
 
 - **Modell-Kacheln** mit Kurzbeschreibung und verfügbaren Faktoren: Fotos (Standard),
-  Fotos schärfer, Saubere Bilder, Maximale Qualität.
+  Fotos schärfer, Grafiken, Grafiken groß (die beiden letzten sind auf saubere, verkleinerte
+  Bilder trainiert und machen aus Kamerafotos Mosaik-Muster, daher der Hinweis bei Fotos).
 - **Größe**: Faktor als Segmente, darunter Ein- → Ausgabe-Auflösung, Megapixel und eine
   ehrliche Zeitschätzung für das gewählte Gerät.
 - **Rauschminderung**: Regler mit „Auto“-Marke und Begründung in Klartext („das Fotomodell

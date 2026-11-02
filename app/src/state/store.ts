@@ -16,6 +16,9 @@ export type ViewMode = 'single' | 'split' | 'side'
 /** Background tile events ("tile", "tiles") from the backend, for the viewer. */
 export const tileBus = new EventTarget()
 
+/** Closes the event socket of the previous backend (after a restart). */
+let closeEvents: (() => void) | null = null
+
 /** A request failed because the backend is gone (closed, crashed, restarting). */
 function connectionMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e)
@@ -117,10 +120,40 @@ export const useStore = create<State>((set, get) => ({
     const byId: Record<string, Job> = {}
     for (const j of jobs.jobs) byId[j.id] = j
     set({ health, models, jobs: byId, queuePaused: jobs.paused })
+    // After a restart of the backend it knows none of the open images: register them again
+    // and carry settings, view and selection over to their new ids.
+    const open = get().images
+    if (open.length) {
+      try {
+        const res = await api.addImages(open.map((i) => i.path))
+        const byPath = new Map(res.images.map((i) => [i.path.toLowerCase(), i]))
+        set((s) => {
+          const ids = new Map<string, string>()
+          const images: ImageInfo[] = []
+          for (const old of s.images) {
+            const fresh = byPath.get(old.path.toLowerCase())
+            if (!fresh) continue // file gone meanwhile
+            ids.set(old.id, fresh.id)
+            images.push(fresh)
+          }
+          const settings: Record<string, Settings> = {}
+          const view: Record<string, ViewState> = {}
+          for (const [o, n] of ids) {
+            if (s.settings[o]) settings[n] = s.settings[o]
+            if (s.view[o]) view[n] = s.view[o]
+          }
+          const sel = s.selectedId ? (ids.get(s.selectedId) ?? null) : null
+          return { images, settings, view, selectedId: sel ?? images[0]?.id ?? null }
+        })
+      } catch (e) {
+        set({ toast: { text: connectionMessage(e), kind: 'error' } })
+      }
+    }
     const queued = [...get().pendingPaths, ...(await window.pixforge.takePendingFiles())]
     set({ pendingPaths: [] })
     if (queued.length) void get().addPaths(queued)
-    api.events((ev) => {
+    closeEvents?.()
+    closeEvents = api.events((ev) => {
       if (ev.type === 'job') {
         const job = ev as unknown as Job
         set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }))

@@ -70,12 +70,12 @@
       "id": "clean-x2",
       "kind": "upscale",
       "name": {
-        "de": "Saubere Bilder 2×",
-        "en": "Clean images 2×"
+        "de": "Grafiken 2×",
+        "en": "Graphics 2×"
       },
       "description": {
-        "de": "Für rauschfreie Bilder, Grafiken und Scans. Sehr originalgetreu.",
-        "en": "For noise-free images, graphics and scans. Very faithful."
+        "de": "Für Grafiken, Screenshots und Renderings (auf verkleinerte, saubere Bilder trainiert). Nicht für Kamerafotos.",
+        "en": "For graphics, screenshots and renderings (trained on clean downscaled images). Not for camera photos."
       },
       "scale": 2,
       "license": "Apache-2.0",
@@ -102,12 +102,12 @@
       "id": "clean-x3",
       "kind": "upscale",
       "name": {
-        "de": "Saubere Bilder 3×",
-        "en": "Clean images 3×"
+        "de": "Grafiken 3×",
+        "en": "Graphics 3×"
       },
       "description": {
-        "de": "Für rauschfreie Bilder, Grafiken und Scans. Sehr originalgetreu.",
-        "en": "For noise-free images, graphics and scans. Very faithful."
+        "de": "Für Grafiken, Screenshots und Renderings (auf verkleinerte, saubere Bilder trainiert). Nicht für Kamerafotos.",
+        "en": "For graphics, screenshots and renderings (trained on clean downscaled images). Not for camera photos."
       },
       "scale": 3,
       "license": "Apache-2.0",
@@ -134,12 +134,12 @@
       "id": "clean-x4",
       "kind": "upscale",
       "name": {
-        "de": "Saubere Bilder 4×",
-        "en": "Clean images 4×"
+        "de": "Grafiken 4×",
+        "en": "Graphics 4×"
       },
       "description": {
-        "de": "Für rauschfreie Bilder, Grafiken und Scans. Sehr originalgetreu.",
-        "en": "For noise-free images, graphics and scans. Very faithful."
+        "de": "Für Grafiken, Screenshots und Renderings (auf verkleinerte, saubere Bilder trainiert). Nicht für Kamerafotos.",
+        "en": "For graphics, screenshots and renderings (trained on clean downscaled images). Not for camera photos."
       },
       "scale": 4,
       "license": "Apache-2.0",
@@ -166,12 +166,12 @@
       "id": "max-x2",
       "kind": "upscale",
       "name": {
-        "de": "Maximale Qualität 2×",
-        "en": "Maximum quality 2×"
+        "de": "Grafiken, groß 2×",
+        "en": "Graphics, large 2×"
       },
       "description": {
-        "de": "Größtes Modell für saubere Bilder. Etwa doppelt so langsam.",
-        "en": "Largest model for clean images. About twice as slow."
+        "de": "Größeres Grafik-Modell (HAT-L). Nicht für Kamerafotos.",
+        "en": "Larger graphics model (HAT-L). Not for camera photos."
       },
       "scale": 2,
       "license": "Apache-2.0",
@@ -198,12 +198,12 @@
       "id": "max-x4",
       "kind": "upscale",
       "name": {
-        "de": "Maximale Qualität 4×",
-        "en": "Maximum quality 4×"
+        "de": "Grafiken, groß 4×",
+        "en": "Graphics, large 4×"
       },
       "description": {
-        "de": "Größtes Modell für saubere Bilder. Etwa doppelt so langsam.",
-        "en": "Largest model for clean images. About twice as slow."
+        "de": "Größeres Grafik-Modell (HAT-L). Nicht für Kamerafotos.",
+        "en": "Larger graphics model (HAT-L). Not for camera photos."
       },
       "scale": 4,
       "license": "Apache-2.0",

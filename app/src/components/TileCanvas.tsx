@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Api } from '@/api/client'
-import type { Region, TileSession } from '@/api/types'
+import type { Post, Region, TileSession } from '@/api/types'
 
 /** What the viewer needs to know about a view (source px, screen px per source px). */
 export interface TileView {
@@ -54,10 +54,13 @@ export function TileCanvas({
   width,
   height,
   clip,
-  area
+  area,
+  post
 }: {
   api: Api
   session: TileSession
+  /** finishing applied by the backend per request (instant, no model run) */
+  post: Post
   done: Set<string>
   /** displayed (possibly animating) view */
   draw: TileView
@@ -71,6 +74,9 @@ export function TileCanvas({
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const cache = useRef(new Map<string, Cached>())
+  /** last decoded cache key per tile: drawn while another finishing or level is loading */
+  const lastOf = useRef(new Map<string, string>())
+  const pk = `${post.sh}/${post.dm}/${post.gr}`
   const loading = useRef(new Set<string>())
   const [tick, setTick] = useState(0)
   const dpr = window.devicePixelRatio || 1
@@ -85,14 +91,15 @@ export function TileCanvas({
     const c = cache.current
     for (const [i, j] of wanted) {
       if (loading.current.size >= MAX_PARALLEL) break
-      const key = `${sid}:${level}:${i},${j}`
+      const key = `${sid}:${pk}:${level}:${i},${j}`
       if (c.has(key) || loading.current.has(key)) continue
       loading.current.add(key)
-      fetch(api.tileUrl(sid, i, j, level))
+      fetch(api.tileUrl(sid, i, j, level, post))
         .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
         .then((b) => createImageBitmap(b))
         .then((bmp) => {
           c.set(key, { bmp, px: bmp.width * bmp.height, used: performance.now() })
+          lastOf.current.set(`${sid}:${i},${j}`, key)
           let total = 0
           for (const v of c.values()) total += v.px
           if (total > MAX_CACHED_PX) {
@@ -112,7 +119,7 @@ export function TileCanvas({
         })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, sid, level, wantedKey, tick])
+  }, [api, sid, pk, level, wantedKey, tick])
 
   // Free decoded tiles when the component goes away (image closed).
   useEffect(() => {
@@ -148,12 +155,17 @@ export function TileCanvas({
     const t = session.tile
     for (const [i, j] of tilesIn(session, draw.view)) {
       if (!done.has(tileKey(i, j))) continue
-      // the matching level, else the closest one that is already decoded
+      // the matching level, else the closest one that is already decoded, else whatever
+      // was shown last (e.g. the previous finishing while the new one loads)
       let hit: Cached | undefined
       for (let d = 0; d < session.levels && !hit; d++) {
         hit =
-          cache.current.get(`${sid}:${want + d}:${i},${j}`) ??
-          cache.current.get(`${sid}:${want - d}:${i},${j}`)
+          cache.current.get(`${sid}:${pk}:${want + d}:${i},${j}`) ??
+          cache.current.get(`${sid}:${pk}:${want - d}:${i},${j}`)
+      }
+      if (!hit) {
+        const last = lastOf.current.get(`${sid}:${i},${j}`)
+        hit = last ? cache.current.get(last) : undefined
       }
       if (!hit) continue
       hit.used = now

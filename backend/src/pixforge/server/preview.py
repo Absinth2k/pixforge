@@ -92,9 +92,13 @@ def _process_region(
     s_src: float,
     factor: float,
     cancel: Callable[[], bool] | None,
-) -> tuple[np.ndarray, float, float]:
+    keep_input: bool = False,
+) -> tuple[np.ndarray, float, float, np.ndarray | None, tuple[int, int]]:
     """Process ``rect`` (source px) with ``margin`` px of real context, the source sampled at
-    ``s_src`` and upscaled by ``factor``. Returns (output without margin, sx, sy)."""
+    ``s_src`` and upscaled by ``factor``.
+
+    Returns (output without margin, sx, sy, model input of the processed sub-image or None,
+    origin of that sub-image in source px)."""
     H0, W0 = img.rgb.shape[:2]
     x, y, rw, rh = rect
     ml, mt = min(margin, x), min(margin, y)
@@ -123,6 +127,7 @@ def _process_region(
         target_width=None,
         target_height=None,
         faces=selected_faces_settings(s.faces),
+        keep_intermediates=keep_input,
     )
     res = pipe.process(replace(img, rgb=sub, alpha=None), inner, cancel=cancel, analysis=sub_an)
     out = res.image.rgb
@@ -130,7 +135,8 @@ def _process_region(
     L, T = round(ml * sx * factor), round(mt * sy * factor)
     R, B = round(mr * sx * factor), round(mb * sy * factor)
     oh, ow = out.shape[:2]
-    return np.ascontiguousarray(out[T : oh - B if B else oh, L : ow - R if R else ow]), sx, sy
+    cut = np.ascontiguousarray(out[T : oh - B if B else oh, L : ow - R if R else ow])
+    return cut, sx, sy, res.intermediates.get("input"), (X0, Y0)
 
 
 def render(
@@ -170,7 +176,7 @@ def render(
         if s_src < APPROX_MIN:
             return view_original(img, region, out_w, out_h), "original"
         kind = "approx"
-    out, _, _ = _process_region(pipe, img, analysis, s, rect, PREVIEW_MARGIN, s_src, factor, cancel)
+    out, *_ = _process_region(pipe, img, analysis, s, rect, PREVIEW_MARGIN, s_src, factor, cancel)
     return pp.resize(out, out_w, out_h), kind
 
 
@@ -182,14 +188,17 @@ def render_exact(
     rect: tuple[int, int, int, int],
     factor: float,
     cancel: Callable[[], bool] | None = None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray | None, tuple[int, int]]:
     """Real result of ``rect`` (source px, settings already from ``stage_settings``).
 
     The output covers exactly the output pixels round(x0 * f) .. round(x1 * f), so tiles of
-    a grid fit together without gaps.
+    a grid fit together without gaps. Also returns the model input (after JPEG repair and
+    denoise) of the processed sub-image and its origin (source px), for the detail mix.
     """
     x, y, w, h = rect
-    out, _, _ = _process_region(pipe, img, analysis, s, rect, CROP_MARGIN, 1.0, factor, cancel)
+    out, _, _, inp, origin = _process_region(
+        pipe, img, analysis, s, rect, CROP_MARGIN, 1.0, factor, cancel, keep_input=True
+    )
     ow = round((x + w) * factor) - round(x * factor)
     oh = round((y + h) * factor) - round(y * factor)
-    return pp.resize(out, ow, oh)
+    return pp.resize(out, ow, oh), inp, origin

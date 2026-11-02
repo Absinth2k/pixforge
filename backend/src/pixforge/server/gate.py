@@ -80,7 +80,8 @@ class GatedBackend(InferenceBackend):
     The pipeline may unload a model while another thread still holds this wrapper (an export
     with model A, a preview switching to model B). The close happens under the gate lock, so
     it never interrupts a running tile; a later ``run_tile`` asks ``reacquire`` for a fresh
-    backend of the same model instead of crashing.
+    backend of the same model instead of crashing (exports, previews) or gives up (background
+    tiles, they belong to settings that are no longer shown).
     """
 
     def __init__(
@@ -126,6 +127,12 @@ class GatedBackend(InferenceBackend):
         try:
             return self.gate.run(self._run, tile)
         except _Closed:
+            if getattr(_local, "priority", JOB) == BACKGROUND:
+                # A background tile of settings that are no longer shown: reloading its model
+                # would unload the one the preview needs, and the two would take turns.
+                from pixforge.core.tiling import Cancelled
+
+                raise Cancelled from None
             if self.reacquire is None:
                 raise RuntimeError(f"model {self.model_id} was unloaded") from None
             fresh = self.reacquire(self.model_id)

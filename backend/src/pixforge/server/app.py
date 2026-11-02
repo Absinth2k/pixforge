@@ -46,7 +46,7 @@ from pixforge.models import registry
 from pixforge.server import preview as pv
 from pixforge.server.gate import Gate, GatedBackend
 from pixforge.server.jobs import ExportTarget, JobQueue
-from pixforge.server.tiles import TileRenderer
+from pixforge.server.tiles import POST_MARGIN, Post, TileRenderer
 
 log = logging.getLogger(__name__)
 MAX_LOADED = 4  # full-resolution images kept in RAM (analysis is always kept)
@@ -308,7 +308,7 @@ def create_app(
     _tile_px: list[int] = []
 
     def tile_size() -> int:
-        """Grid size of the background tiles: one model tile minus the context margin."""
+        """Grid size of the background tiles: one model tile minus the margins."""
         if not _tile_px:
             from pixforge.backends.onnx_backend import list_devices
             from pixforge.core.pipeline import CROP_MARGIN, TILE_SIZES
@@ -324,7 +324,8 @@ def create_app(
             t = 192
             if vram:
                 t = next((t for t in TILE_SIZES if 500 + 38 * t * t / 1024 <= vram * 0.5), 128)
-            _tile_px.append(max(64, t - 2 * CROP_MARGIN))
+            # one model tile per grid tile: context and finishing margin must fit in
+            _tile_px.append(max(64, t - 2 * (CROP_MARGIN + POST_MARGIN)))
         return _tile_px[0]
 
     tiles = TileRenderer(pipeline, store.image, gate, events.publish, tile_size, with_qf)
@@ -512,8 +513,16 @@ def create_app(
         return sess.public()
 
     @app.get("/api/tiles/{sid}/{i}/{j}/{level}", dependencies=dep)
-    def tile_image(sid: str, i: int, j: int, level: int) -> Response:
-        data = tiles.tile(sid, i, j, level)
+    def tile_image(
+        sid: str, i: int, j: int, level: int, sh: float = 0, dm: float = 0, gr: float = 0
+    ) -> Response:
+        """Tile at pyramid ``level`` with the finishing (sharpen, detail mix, grain) applied."""
+        post = Post(
+            sharpen=min(100.0, max(0.0, sh)),
+            detail_mix=min(100.0, max(0.0, dm)),
+            grain=min(100.0, max(0.0, gr)),
+        )
+        data = tiles.tile(sid, i, j, level, post)
         if data is None:
             raise HTTPException(404, "Kachel nicht vorhanden")
         return Response(

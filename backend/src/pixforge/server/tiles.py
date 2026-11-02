@@ -7,8 +7,13 @@ keeps every finished tile as a small JPEG pyramid (full output resolution, 1/2, 
 The viewer draws the level that matches the screen, so a fully zoomed-out view shows the real
 result downsampled, not a model run on a tiny copy of the image.
 
-- One session per (image, stage, settings). The crop is not part of the key: it only limits
-  which tiles are computed, their content is the same.
+- One session per (image, stage, model settings). Neither the crop nor the finishing (detail
+  mix, sharpen, grain) is part of the key: the crop only limits which tiles are computed, and
+  the finishing is applied when a tile is requested (milliseconds, see ``finish``), so those
+  sliders and the finishing on/off switch never trigger a new model run.
+- For that, every tile also keeps up to ``POST_MARGIN`` output px of its neighbours (so the
+  sharpening has real context and no seams) and the model input around it (for the detail
+  mix, a plain Lanczos upscale of exactly what the model saw).
 - Only the most recently opened session is worked on; tiles in the visible region first,
   then outwards. A settings change starts a new session and cancels the running tile.
 - Tiles have the lowest GPU priority: they pause while a preview or an export wants the GPU.
@@ -31,8 +36,9 @@ from typing import Any
 import cv2
 import numpy as np
 
+from pixforge.core import postprocess as pp
 from pixforge.core.io import ImageData
-from pixforge.core.pipeline import Analysis, Pipeline, Settings, target_size
+from pixforge.core.pipeline import Analysis, Pipeline, Settings, finish, target_size
 from pixforge.core.tiling import Cancelled
 from pixforge.faces.restore import align_matrix, crop_size_in_image, size_factor
 from pixforge.server.gate import Gate
@@ -43,11 +49,17 @@ log = logging.getLogger(__name__)
 #: wait this long after a session was opened before using the GPU for it (quick clicks
 #: through models or sliders would otherwise start, and cancel, a tile each time)
 START_DELAY_S = 0.6
-#: total memory for finished tiles of all sessions (JPEG bytes)
+#: total memory for finished tiles of all sessions
 MAX_BYTES = 1024 * 2**20
+#: finished tiles with finishing applied, per session
+POST_CACHE_BYTES = 192 * 2**20
 #: smallest pyramid level (longest side, px)
 MIN_LEVEL_PX = 24
 JPEG_QUALITY = (92, 90)  # full resolution, reduced levels
+#: output px of the neighbours kept around each tile (unsharp radius 1.2 needs ~4)
+POST_MARGIN = 8
+#: extra source px around the model input for the Lanczos of the detail mix
+LANCZOS_CONTEXT = 4
 
 Rect = tuple[int, int, int, int]  # x, y, w, h in source px
 Loader = Callable[[str], tuple[ImageData, Analysis]]
@@ -62,6 +74,11 @@ def _jpeg(rgb: np.ndarray, quality: int) -> bytes:
     if not ok:
         raise RuntimeError("JPEG encoding failed")
     return buf.tobytes()
+
+
+def _decode(data: bytes) -> np.ndarray:
+    bgr = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
 
 def pyramid(rgb: np.ndarray, levels: int) -> list[bytes]:
@@ -113,21 +130,54 @@ def face_squares(
     return out
 
 
+@dataclass(frozen=True)
+class Post:
+    """The finishing applied to tiles on request (0..100 each)."""
+
+    sharpen: float = 0.0
+    detail_mix: float = 0.0
+    grain: float = 0.0
+
+    @property
+    def zero(self) -> bool:
+        return self.sharpen <= 0 and self.detail_mix <= 0 and self.grain <= 0
+
+    @property
+    def key(self) -> tuple[float, float, float]:
+        return (round(self.sharpen, 2), round(self.detail_mix, 2), round(self.grain, 2))
+
+
+@dataclass
+class TileData:
+    levels: list[bytes]  # pyramid without finishing; level 0 is exactly the tile
+    margin_jpeg: bytes  # level 0 plus up to POST_MARGIN px of the neighbours
+    margin: tuple[int, int, int, int]  # left, top, right, bottom (output px)
+    src: np.ndarray | None  # model input around the tile (uint8), for the detail mix
+    src_origin: tuple[int, int]  # source px of src[0, 0]
+
+    @property
+    def nbytes(self) -> int:
+        n = sum(len(b) for b in self.levels) + len(self.margin_jpeg)
+        return n + (self.src.nbytes if self.src is not None else 0)
+
+
 @dataclass
 class Session:
     id: str
     key: str
     image_id: str
     stage: str
-    settings: Settings
+    settings: Settings  # model settings, finishing switched off
     width: int
     height: int
     factor: float
     tile: int
     area: Rect
     focus: tuple[float, float, float, float] | None = None
-    tiles: dict[tuple[int, int], list[bytes]] = field(default_factory=dict)
+    tiles: dict[tuple[int, int], TileData] = field(default_factory=dict)
     failed: set[tuple[int, int]] = field(default_factory=set)
+    post_cache: OrderedDict[tuple[Any, ...], bytes] = field(default_factory=OrderedDict)
+    post_bytes: int = 0
     opened: float = field(default_factory=time.time)
     used: float = field(default_factory=time.time)
     state: str = "waiting"  # waiting | running | paused | done | error
@@ -146,6 +196,11 @@ class Session:
     @property
     def levels(self) -> int:
         return level_count(self.tile * self.factor)
+
+    @property
+    def allows_post(self) -> bool:
+        """Finishing exists only on the final result (not on the "denoised" stage)."""
+        return self.stage == "result"
 
     def rect(self, i: int, j: int) -> Rect:
         x, y = i * self.tile, j * self.tile
@@ -178,7 +233,7 @@ class Session:
 
     @property
     def nbytes(self) -> int:
-        return sum(len(b) for lv in self.tiles.values() for b in lv)
+        return sum(t.nbytes for t in self.tiles.values()) + self.post_bytes
 
     def counts(self) -> tuple[int, int]:
         area = self.in_area()
@@ -204,9 +259,56 @@ class Session:
         }
 
 
+def model_settings(s: Settings) -> Settings:
+    """The settings that need a model run (finishing is applied later, per request)."""
+    return replace(s, sharpen=0.0, detail_mix=0.0, grain=0.0)
+
+
 def settings_key(image_id: str, stage: str, s: Settings) -> str:
     d = dataclasses.asdict(replace(s, crop=None, tile=None, jpeg_qf=None))
     return json.dumps([image_id, stage, d], sort_keys=True, default=str)
+
+
+def finish_tile(sess: Session, k: tuple[int, int], td: TileData, level: int, post: Post) -> bytes:
+    """Level ``level`` of tile ``k`` with the finishing applied (exact at level 0)."""
+    f = sess.factor
+    i, j = k
+    x, y, w, h = sess.rect(i, j)
+    detail = 0.0 if sess.settings.task == "denoise" else post.detail_mix
+    s = replace(sess.settings, sharpen=post.sharpen, grain=post.grain, detail_mix=detail)
+    seed = j * 7919 + i * 31 + 1
+    src = td.src
+    sx0, sy0 = td.src_origin
+    if level == 0:
+        img = _decode(td.margin_jpeg)
+        ml, mt, _, _ = td.margin
+        ox0, oy0 = round(x * f) - ml, round(y * f) - mt  # output px of img[0, 0]
+
+        def classic0() -> np.ndarray:
+            assert src is not None
+            sh, sw = src.shape[:2]
+            ow = round((sx0 + sw) * f) - round(sx0 * f)
+            oh = round((sy0 + sh) * f) - round(sy0 * f)
+            up = cv2.resize(
+                src.astype(np.float32) / 255.0, (ow, oh), interpolation=cv2.INTER_LANCZOS4
+            )
+            dx, dy = ox0 - round(sx0 * f), oy0 - round(sy0 * f)
+            return up[dy : dy + img.shape[0], dx : dx + img.shape[1]]
+
+        out = finish(img, classic0 if src is not None else None, s, f, seed)
+        tw, th = round((x + w) * f) - round(x * f), round((y + h) * f) - round(y * f)
+        out = out[mt : mt + th, ml : ml + tw]
+        return _jpeg(out, JPEG_QUALITY[0])
+
+    img = _decode(td.levels[level])
+
+    def classic_k() -> np.ndarray:
+        assert src is not None
+        part = src[y - sy0 : y - sy0 + h, x - sx0 : x - sx0 + w].astype(np.float32) / 255.0
+        return pp.resize(part, img.shape[1], img.shape[0])
+
+    out = finish(img, classic_k if src is not None else None, s, f, seed, 0.5**level)
+    return _jpeg(out, JPEG_QUALITY[1])
 
 
 class TileRenderer:
@@ -249,7 +351,7 @@ class TileRenderer:
         focus: tuple[float, float, float, float] | None,
         area: Rect | None,
     ) -> Session:
-        s = stage_settings(settings, stage)
+        s = model_settings(stage_settings(settings, stage))
         _, _, factor = target_size(width, height, s)
         key = settings_key(image_id, stage, s)
         with self._lock:
@@ -284,14 +386,31 @@ class TileRenderer:
     def get(self, sid: str) -> Session | None:
         return self.by_id.get(sid)
 
-    def tile(self, sid: str, i: int, j: int, level: int) -> bytes | None:
+    def tile(self, sid: str, i: int, j: int, level: int, post: Post | None = None) -> bytes | None:
         sess = self.by_id.get(sid)
         if sess is None:
             return None
-        lv = sess.tiles.get((i, j))
-        if lv is None:
+        td = sess.tiles.get((i, j))
+        if td is None:
             return None
-        return lv[max(0, min(level, len(lv) - 1))]
+        level = max(0, min(level, len(td.levels) - 1))
+        if post is None or post.zero or not sess.allows_post:
+            return td.levels[level]
+        ck = (post.key, level, i, j)
+        with self._lock:
+            hit = sess.post_cache.get(ck)
+            if hit is not None:
+                sess.post_cache.move_to_end(ck)
+                return hit
+        data = finish_tile(sess, (i, j), td, level, post)
+        with self._lock:
+            if ck not in sess.post_cache:
+                sess.post_cache[ck] = data
+                sess.post_bytes += len(data)
+            while sess.post_bytes > POST_CACHE_BYTES and sess.post_cache:
+                _, old = sess.post_cache.popitem(last=False)
+                sess.post_bytes -= len(old)
+        return data
 
     def drop_image(self, image_id: str) -> None:
         with self._lock:
@@ -372,22 +491,24 @@ class TileRenderer:
 
         t0 = time.perf_counter()
         img, an = self.loader(sess.image_id)
+        f = sess.factor
         with self.gate.background():
             if not sess.prepared:
                 sess.settings = self.prepare(sess.image_id, img, sess.settings)
-                sess.squares = face_squares(self.pipeline, an, sess.settings, sess.factor)
+                sess.squares = face_squares(self.pipeline, an, sess.settings, f)
                 sess.prepared = True
             x, y, w, h = sess.rect(*k)
-            # grow the processed region over every face square the tile touches
-            x0, y0, x1, y1 = float(x), float(y), float(x + w), float(y + h)
+            # the tile, a few px of its neighbours for the finishing, and every face square
+            # it touches
+            mo = math.ceil(POST_MARGIN / f)
+            x0, y0, x1, y1 = float(x - mo), float(y - mo), float(x + w + mo), float(y + h + mo)
             for q in sess.squares or []:
                 if _intersects((x, y, w, h), (q[0] - 2, q[1] - 2, q[2] + 4, q[3] + 4)):
                     x0, y0 = min(x0, q[0]), min(y0, q[1])
                     x1, y1 = max(x1, q[0] + q[2]), max(y1, q[1] + q[3])
             ex0, ey0 = max(0, math.floor(x0)), max(0, math.floor(y0))
             ex1, ey1 = min(sess.width, math.ceil(x1)), min(sess.height, math.ceil(y1))
-            f = sess.factor
-            out = render_exact(
+            out, inp, (X0, Y0) = render_exact(
                 self.pipeline,
                 img,
                 an,
@@ -396,10 +517,30 @@ class TileRenderer:
                 f,
                 cancel=cancel,
             )
+        # cut the tile (and its margin) out of the processed region
         ox, oy = round(x * f) - round(ex0 * f), round(y * f) - round(ey0 * f)
         tw, th = round((x + w) * f) - round(x * f), round((y + h) * f) - round(y * f)
-        out = np.ascontiguousarray(out[oy : oy + th, ox : ox + tw])
-        sess.tiles[k] = pyramid(out, sess.levels)
+        ml, mt = min(POST_MARGIN, ox), min(POST_MARGIN, oy)
+        mr = max(0, min(POST_MARGIN, out.shape[1] - ox - tw))
+        mb = max(0, min(POST_MARGIN, out.shape[0] - oy - th))
+        tile = np.ascontiguousarray(out[oy : oy + th, ox : ox + tw])
+        with_margin = out[oy - mt : oy + th + mb, ox - ml : ox + tw + mr]
+        src, origin = None, (0, 0)
+        if inp is not None:
+            ms = mo + LANCZOS_CONTEXT
+            ih, iw = inp.shape[:2]
+            sx0, sy0 = max(X0, x - ms), max(Y0, y - ms)
+            sx1, sy1 = min(X0 + iw, x + w + ms), min(Y0 + ih, y + h + ms)
+            part = inp[sy0 - Y0 : sy1 - Y0, sx0 - X0 : sx1 - X0]
+            src = (np.clip(part, 0, 1) * 255 + 0.5).astype(np.uint8)
+            origin = (sx0, sy0)
+        sess.tiles[k] = TileData(
+            pyramid(tile, sess.levels),
+            _jpeg(with_margin, JPEG_QUALITY[0]),
+            (ml, mt, mr, mb),
+            src,
+            origin,
+        )
         done, total = sess.counts()
         log.debug(
             "tile %s/%s of %s: %d ms", done, total, sess.id, (time.perf_counter() - t0) * 1000

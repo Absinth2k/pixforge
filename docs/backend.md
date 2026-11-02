@@ -242,8 +242,9 @@ schon entfernt hatte. Sie war also in beide Richtungen unzuverlässig.
   (Modell bei nativem Faktor auf leicht verkleinerter Quelle). Darunter wird das Original
   gezeigt, gekennzeichnet in der Statuszeile.
 - **Echte Kacheln** (`server/tiles.py`): Ein Hintergrund-Thread rechnet das Bild in einem
-  festen Raster wie der Export: Rasterweite = Modellkachel − 2 × 32 px Kontext, also 320 px
-  bei 16 GB. Gesichter, deren 512er-Ausrichtungsquadrat eine Kachel berührt, werden ganz
+  festen Raster wie der Export: Rasterweite = Modellkachel − 2 × (32 px Kontext + 8 px Rand),
+  also 304 px bei 16 GB. Schon 4 px mehr Eingabe (388 statt 384) würden pro Kachel vier
+  Modellkacheln kosten. Gesichter, deren 512er-Ausrichtungsquadrat eine Kachel berührt, werden ganz
   mitgerechnet, deshalb gibt es keine Naht durch Gesichter. Jede Kachel wird als
   JPEG-Pyramide gespeichert (1, 1/2, 1/4 …), die App zeichnet die Stufe, die zum Bildschirm
   passt. Reihenfolge: sichtbarer Bereich zuerst. Priorität im GPU-Gate: Vorschau > Export >
@@ -252,8 +253,28 @@ schon entfernt hatte. Sie war also in beide Richtungen unzuverlässig.
 - **Messung** (20-MP-CR3, „Fotos“ 4×, RX 9070 XT): etwa 1,3 s pro Kachel, das ganze Bild
   nach rund 4,5 min. Eine 100-%-Vorschau wartet daneben höchstens eine Modellkachel
   (1,5–1,6 s statt 0,8–1,5 s). Pyramide pro Kachel: 145 KB + 30 KB + 10 KB + …
+- **Feinschliff ohne Modelllauf:** Detail-Mischung, Schärfen und Korn stehen in der Pipeline
+  jetzt ganz am Ende (nach den Gesichtern, `pipeline.finish`). Die Kacheln speichern das
+  Ergebnis ohne Feinschliff, dazu 8 px der Nachbarn (Schärfen ohne Nähte) und das
+  Modell-Eingangsbild (Lanczos für die Detail-Mischung). Der Feinschliff wird pro Abruf
+  angewendet: etwa 160 ms für eine volle 1216er-Kachel, 10–25 ms für verkleinerte Stufen. In
+  verkleinerten Stufen werden Radius und Korngröße mitskaliert, was dem Ergebnis von
+  „erst voll rechnen, dann verkleinern“ nahekommt. Die Regler und der An/Aus-Schalter starten
+  deshalb keine neue Berechnung.
 - Eine JPEG-Qualitätsschätzung pro Bild (`Settings.jpeg_qf`), damit Ausschnitte und Kacheln
   dieselbe FBCNN-Stärke wie der Export bekommen.
+
+## 4d. „Grafiken“-Modelle (HAT ImageNet) und Kamerafotos
+
+Andre fand „Saubere Bilder“ und „Maximale Qualität“ auf Fotos „katastrophal“. Geprüft:
+ONNX gegen das Original-PyTorch-Modell auf einem echten Ausschnitt: 132 dB, also bitgenau.
+fp16 gegen fp32: 63 dB. Es ist kein Export- oder Vorschaufehler. Die Modelle sind auf
+bikubisch verkleinerte, saubere Bilder trainiert. Rauschen, Handy-Schärfung und
+JPEG-Blöcke machen sie zu Mosaik-Mustern. Real-HAT-GAN („Fotos“) ist auf echte Degradationen
+trainiert. Folge: Die Modelle heißen jetzt „Grafiken“ und „Grafiken, groß“, und bei Fotos
+(Kamera-Metadaten oder RAW) erscheint ein Hinweis. Geschwindigkeit pro Modellkachel 384²:
+HAT 1,7–2,4 s, HAT-L 2,6 s, VRAM jeweils etwa 5,4 GB. HAT-L lädt aber 7,4 s statt 2,5 s, und
+die 2×-Varianten brauchen für dieselbe Bildschirmfläche viermal so viele Quellpixel wie 4×.
 
 ## 5. PyTorch mit ROCm unter Windows (optional, nur Entwicklung)
 

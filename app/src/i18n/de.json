@@ -79,7 +79,11 @@
     "nonCommercial": "nicht-kommerziell",
     "onlyLargest": "Nur das größte Gesicht",
     "reset": "Zurücksetzen",
-    "applyAll": "Für alle Bilder"
+    "applyAll": "Für alle Bilder",
+    "fineOn": "An",
+    "fineOff": "Aus",
+    "fineToggleHint": "Feinschliff ein- und ausschalten, um Vorher/Nachher zu vergleichen. Die Werte bleiben erhalten; ausgeschaltet wird er auch nicht exportiert.",
+    "graphicsOnPhoto": "Diese Modelle sind für saubere, verkleinerte Bilder wie Grafiken und Renderings trainiert. Bei Kamera- und Handyfotos verstärken sie Rauschen, Schärfung und JPEG-Spuren zu Mosaik-Mustern. Für Fotos „Fotos“ oder „Fotos, schärfer“ wählen."
   },
   "batch": {
     "title": "Warteschlange",

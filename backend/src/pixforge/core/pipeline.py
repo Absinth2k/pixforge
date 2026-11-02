@@ -1,7 +1,10 @@
 """The Pixforge processing pipeline.
 
-    analyse  ->  JPEG repair  ->  denoise  ->  upscale (1-2 passes)  ->  detail mix
-             ->  faces  ->  sharpen  ->  grain  ->  resize to target
+    analyse  ->  JPEG repair  ->  denoise  ->  upscale (1-2 passes)  ->  faces
+             ->  detail mix  ->  sharpen  ->  grain
+
+The last three steps are cheap and local ("finishing", see ``finish``): the preview applies
+them to finished tiles without running the models again.
 
 All steps are optional except the upscale. Every heavy step runs tiled through an
 InferenceBackend, so the same code serves the CLI, the server and the tests (with a fake
@@ -119,6 +122,33 @@ class Result:
 
 
 # ----------------------------------------------------------------------------- helpers
+def finish(
+    up: np.ndarray,
+    classic: Callable[[], np.ndarray] | None,
+    s: Settings,
+    factor: float,
+    seed: int,
+    level_scale: float = 1.0,
+) -> np.ndarray:
+    """Detail mix, sharpen and grain on an (upscaled) image.
+
+    ``classic`` returns a plain Lanczos upscale of the model input (for the detail mix).
+    ``level_scale`` < 1 approximates the result of finishing at full size and then
+    downsampling by that factor (preview pyramid): radii shrink, and effects whose radius
+    falls below one pixel fade out the way they would when averaged away.
+    """
+    if s.detail_mix > 0 and classic is not None:
+        up = pp.detail_mix(up, classic(), s.detail_mix)
+    if s.sharpen > 0:
+        r = 1.2 * level_scale
+        up = pp.sharpen(up, s.sharpen * min(1.0, r / 0.6), radius=max(0.6, r))
+    if s.grain > 0:
+        size = max(1.0, factor / 2) * level_scale
+        amount = s.grain * min(1.0, size)
+        up = pp.add_grain(up, amount, size=max(1.0, size), seed=seed)
+    return up
+
+
 def selected_faces_settings(fs: FaceSettings) -> FaceSettings:
     """Face settings for a sub-image whose face list was already selected with ``fs``."""
     return replace(fs, exclude=(), min_size=0.0, only_largest=False)
@@ -269,8 +299,10 @@ class Pipeline:
             log.info("loading model %s", model_id)
             if self.on_model_load:
                 self.on_model_load(model_id, True)
+            t = time.perf_counter()
             try:
                 self._backends[model_id] = self._factory(model_id)
+                log.info("model %s ready in %.1f s", model_id, time.perf_counter() - t)
             finally:
                 if self.on_model_load:
                     self.on_model_load(model_id, False)
@@ -392,6 +424,9 @@ class Pipeline:
             timings["denoise"] = time.perf_counter() - t
         check_cancel()
 
+        if s.keep_intermediates:
+            inter["input"] = rgb  # what the upscaler sees (after JPEG repair and denoise)
+
         # 3. Upscale
         t = time.perf_counter()
         device_name = ""
@@ -405,11 +440,7 @@ class Pipeline:
         timings["upscale"] = time.perf_counter() - t
         check_cancel()
 
-        # 4. Detail mix with a plain Lanczos upscale
-        if s.detail_mix > 0 and not denoise_only:
-            up = pp.detail_mix(up, pp.resize(rgb, W, H), s.detail_mix)
-
-        # 5. Faces
+        # 4. Faces
         restored = 0
         if want_faces:
             t = time.perf_counter()
@@ -432,10 +463,10 @@ class Pipeline:
             timings["faces"] = time.perf_counter() - t
         check_cancel()
 
-        # 6. Sharpen, grain, alpha
+        # 5. Finishing: detail mix, sharpen, grain
         report("finish", 0.0, "")
-        up = pp.sharpen(up, s.sharpen)
-        up = pp.add_grain(up, s.grain, size=max(1.0, factor / 2), seed=w * 31 + h)
+        classic = (lambda: pp.resize(rgb, W, H)) if s.detail_mix > 0 and not denoise_only else None
+        up = finish(up, classic, s, factor, seed=w * 31 + h)
         up = pp.clip01(up.astype(np.float32, copy=False))
         alpha = None
         if img.alpha is not None:

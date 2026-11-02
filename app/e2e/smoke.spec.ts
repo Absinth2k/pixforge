@@ -78,6 +78,13 @@ test('start screen, load an image, preview renders', async () => {
     // the real result arrives as background tiles and replaces the quick preview
     await expect(page.getByTestId('tile-canvas')).toBeAttached({ timeout: 30_000 })
     await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 60_000 })
+    // finishing on/off: no new model run, the tiles stay complete
+    const fine = page.getByTestId('fine-toggle')
+    await expect(fine).toHaveAttribute('aria-pressed', 'true')
+    await fine.click()
+    await expect(fine).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 5_000 })
+    await fine.click()
     // the estimate shows the 4x output size
     await expect(page.getByText('1.920 × 1.280')).toBeVisible()
     // denoise-only switches the task and the output size

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Crop, MoveRight, RotateCcw } from 'lucide-react'
+import { Check, Crop, Eye, EyeOff, MoveRight, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Estimate, ImageInfo, Settings } from '@/api/types'
 import { useStore } from '@/state/store'
@@ -37,17 +37,20 @@ const MODELS: ModelChoice[] = [
   {
     family: 'clean',
     id: () => 'clean-x4',
-    name: { de: 'Saubere Bilder', en: 'Clean images' },
-    desc: { de: 'Scans, Grafiken, rauschfreie Fotos', en: 'Scans, graphics, noise-free photos' },
+    name: { de: 'Grafiken', en: 'Graphics' },
+    desc: {
+      de: 'Screenshots, Renderings, Zeichnungen. Nicht für Kamerafotos',
+      en: 'Screenshots, renderings, drawings. Not for camera photos'
+    },
     meta: '2× · 3× · 4×'
   },
   {
     family: 'max',
     id: () => 'max-x4',
-    name: { de: 'Maximale Qualität', en: 'Maximum quality' },
+    name: { de: 'Grafiken, groß', en: 'Graphics, large' },
     desc: {
-      de: 'Größtes Modell, etwa doppelt so langsam',
-      en: 'Largest model, about twice as slow'
+      de: 'Größeres Grafik-Modell, lädt länger. Nicht für Kamerafotos',
+      en: 'Larger graphics model, loads longer. Not for camera photos'
     },
     meta: '2× · 4×'
   }
@@ -98,6 +101,10 @@ export function SettingsPanel({ img }: { img: ImageInfo }) {
   }, [api, img.id, settingsKey])
 
   if (!settings) return null
+  const fineOn = settings.fine_enabled !== false
+  // camera or phone metadata, or a RAW file: a real photo
+  const isCameraPhoto =
+    !!img.meta.make || !!img.meta.iso || ['raw', 'dng', 'heif'].includes(img.format.toLowerCase())
   const denoiseTask = settings.task === 'denoise'
   const family = familyOf(settings.model)
   const choice = scaleChoice(settings)
@@ -188,6 +195,9 @@ export function SettingsPanel({ img }: { img: ImageInfo }) {
             )
           })}
         </div>
+        {!denoiseTask && (family === 'clean' || family === 'max') && isCameraPhoto && (
+          <Note>{t('panel.graphicsOnPhoto')}</Note>
+        )}
       </Section>
 
       <Section title={t('panel.task')}>
@@ -333,32 +343,57 @@ export function SettingsPanel({ img }: { img: ImageInfo }) {
         )}
       </section>
 
-      <Section title={t('panel.fine')}>
-        <Slider
-          id="sl-sharpen"
-          label={t('panel.sharpen')}
-          value={settings.sharpen}
-          onChange={(v) => set((s) => void (s.sharpen = v))}
-        />
-        <Slider
-          id="sl-detail"
-          label={t('panel.detail')}
-          value={settings.detail_mix}
-          disabled={denoiseTask}
-          onChange={(v) => set((s) => void (s.detail_mix = v))}
-        />
-        <Slider
-          id="sl-grain"
-          label={t('panel.grain')}
-          value={settings.grain}
-          onChange={(v) => set((s) => void (s.grain = v))}
-        />
-        <Slider
-          id="sl-jpeg"
-          label={t('panel.jpeg')}
-          value={settings.jpeg_strength}
-          onChange={(v) => set((s) => void (s.jpeg_strength = v))}
-        />
+      <Section
+        title={t('panel.fine')}
+        extra={
+          <button
+            type="button"
+            aria-pressed={fineOn}
+            data-testid="fine-toggle"
+            title={t('panel.fineToggleHint')}
+            onClick={() => set((s) => void (s.fine_enabled = !fineOn))}
+            className={`flex h-[24px] items-center gap-1.5 rounded-btn border px-2 text-[11.5px] font-medium ${
+              fineOn
+                ? 'border-accent-line bg-accent-soft text-text'
+                : 'border-line text-text3 hover:bg-hover'
+            }`}
+          >
+            {fineOn ? (
+              <Eye size={13} aria-hidden="true" />
+            ) : (
+              <EyeOff size={13} aria-hidden="true" />
+            )}
+            {fineOn ? t('panel.fineOn') : t('panel.fineOff')}
+          </button>
+        }
+      >
+        <div className={fineOn ? undefined : 'opacity-50'}>
+          <Slider
+            id="sl-sharpen"
+            label={t('panel.sharpen')}
+            value={settings.sharpen}
+            onChange={(v) => set((s) => void ((s.sharpen = v), (s.fine_enabled = true)))}
+          />
+          <Slider
+            id="sl-detail"
+            label={t('panel.detail')}
+            value={settings.detail_mix}
+            disabled={denoiseTask}
+            onChange={(v) => set((s) => void ((s.detail_mix = v), (s.fine_enabled = true)))}
+          />
+          <Slider
+            id="sl-grain"
+            label={t('panel.grain')}
+            value={settings.grain}
+            onChange={(v) => set((s) => void ((s.grain = v), (s.fine_enabled = true)))}
+          />
+          <Slider
+            id="sl-jpeg"
+            label={t('panel.jpeg')}
+            value={settings.jpeg_strength}
+            onChange={(v) => set((s) => void ((s.jpeg_strength = v), (s.fine_enabled = true)))}
+          />
+        </div>
       </Section>
 
       <section className="border-b border-line px-[18px] py-[14px]">

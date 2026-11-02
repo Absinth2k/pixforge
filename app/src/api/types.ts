@@ -32,6 +32,39 @@ export interface Settings {
   grain: number
   faces: FaceSettings
   crop: [number, number, number, number] | null
+  /** Feinschliff (sharpen, detail mix, grain, JPEG) on/off without losing the values */
+  fine_enabled?: boolean
+}
+
+/** What the backend gets: a switched-off Feinschliff counts as all zero. */
+export function wireSettings(s: Settings): Settings {
+  if (s.fine_enabled !== false) return s
+  return { ...s, sharpen: 0, detail_mix: 0, grain: 0, jpeg_strength: 0 }
+}
+
+/** The finishing the backend applies to finished tiles (no model run needed). */
+export interface Post {
+  sh: number
+  dm: number
+  gr: number
+}
+
+export function postOf(s: Settings): Post {
+  const w = wireSettings(s)
+  return { sh: w.sharpen, dm: w.task === 'denoise' ? 0 : w.detail_mix, gr: w.grain }
+}
+
+/** Settings that need a model run (the tiles of a session stay valid while only these match). */
+export function modelSettingsKey(s: Settings): string {
+  const w = wireSettings(s)
+  return JSON.stringify({
+    ...w,
+    sharpen: 0,
+    detail_mix: 0,
+    grain: 0,
+    crop: null,
+    fine_enabled: null
+  })
 }
 
 export interface DenoiseSuggestion {
@@ -165,5 +198,6 @@ export const defaultSettings = (): Settings => ({
     only_largest: false,
     exclude: []
   },
-  crop: null
+  crop: null,
+  fine_enabled: true
 })

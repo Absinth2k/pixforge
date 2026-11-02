@@ -129,12 +129,38 @@ def _wait_tiles(client: TestClient, body: dict, timeout: float = 30) -> dict:
     raise AssertionError(f"tiles not done: {d}")
 
 
-def test_background_tiles_assemble_to_the_export_result(client: TestClient) -> None:
+def _textured(tmp: Path, w: int = 160, h: int = 120) -> Path:
+    yy, xx = np.mgrid[0:h, 0:w]
+    check = ((xx // 6 + yy // 6) % 2) * 70
+    arr = np.stack([xx * 150 // w + check, yy * 150 // h + check, 60 + check], -1)
+    p = tmp / "muster.png"
+    Image.fromarray(arr.astype(np.uint8)).save(p)
+    return p
+
+
+def _assemble(client: TestClient, d: dict, query: str = "") -> np.ndarray:
     import io
 
-    info = _add(client)
+    full = np.zeros((240, 320, 3), np.float32)
+    for i, j in d["done"]:
+        r = client.get(f"/api/tiles/{d['id']}/{i}/{j}/0{query}", headers=H)
+        assert r.status_code == 200
+        with Image.open(io.BytesIO(r.content)) as im:
+            a = np.asarray(im.convert("RGB"), np.float32) / 255
+        y, x = j * 128, i * 128
+        full[y : y + a.shape[0], x : x + a.shape[1]] = a
+        # reduced pyramid levels exist and halve the size
+        r1 = client.get(f"/api/tiles/{d['id']}/{i}/{j}/1{query}", headers=H)
+        with Image.open(io.BytesIO(r1.content)) as im1:
+            assert abs(im1.size[0] - a.shape[1] / 2) <= 1
+    return full
+
+
+def test_background_tiles_assemble_to_the_export_result(client: TestClient) -> None:
+    r = client.post("/api/images", json={"paths": [str(_textured(client.tmp))]}, headers=H)
+    info = r.json()["images"][0]
     client.app.state.tiles.tile_size = lambda: 64  # type: ignore[attr-defined]
-    settings = {"scale": 2, "denoise": {"mode": "off"}, "sharpen": 40}
+    settings = {"scale": 2, "denoise": {"mode": "off"}, "sharpen": 60, "detail_mix": 40}
     body = {
         "image_id": info["id"],
         "settings": settings,
@@ -143,27 +169,21 @@ def test_background_tiles_assemble_to_the_export_result(client: TestClient) -> N
     d = _wait_tiles(client, body)
     assert d["state"] == "done", d
     assert (d["cols"], d["rows"], d["total"], d["done_count"]) == (3, 2, 6, 6)
-    full = np.zeros((240, 320, 3), np.float32)
-    for i, j in d["done"]:
-        r = client.get(f"/api/tiles/{d['id']}/{i}/{j}/0", headers=H)
-        assert r.status_code == 200
-        with Image.open(io.BytesIO(r.content)) as im:
-            a = np.asarray(im.convert("RGB"), np.float32) / 255
-        y, x = j * 128, i * 128
-        full[y : y + a.shape[0], x : x + a.shape[1]] = a
-        # reduced pyramid levels exist and halve the size
-        r1 = client.get(f"/api/tiles/{d['id']}/{i}/{j}/1", headers=H)
-        with Image.open(io.BytesIO(r1.content)) as im1:
-            assert abs(im1.size[0] - a.shape[1] / 2) <= 1
-    # same pixels as processing the whole image (tile context = export crop margin)
+    # the finishing is applied per request, so it can be switched without a model run
+    finished = _assemble(client, d, "?sh=60&dm=40")
+    plain = _assemble(client, d)
     pipe = client.app.state.pipeline  # type: ignore[attr-defined]
     img, an = client.app.state.store.image(info["id"])  # type: ignore[attr-defined]
     from pixforge.server.app import SettingsIn
 
     ref = pipe.process(img, SettingsIn(**settings).to_settings(), analysis=an).image.rgb
-    assert np.abs(full - ref).mean() < 0.01  # JPEG tiles
-    # the same settings reuse the finished session
-    again = client.post("/api/tiles", json=body, headers=H).json()
+    err = np.abs(finished - ref).mean()
+    assert err < 0.006, err  # same pixels as the export, up to JPEG (no seams at the tiles)
+    assert np.abs(plain - ref).mean() > 2 * err  # and the finishing really made a difference
+    # other finishing values: the same finished session, no new model run
+    again = client.post(
+        "/api/tiles", json={**body, "settings": {**settings, "sharpen": 0, "grain": 30}}, headers=H
+    ).json()
     assert again["id"] == d["id"] and again["state"] == "done"
 
 

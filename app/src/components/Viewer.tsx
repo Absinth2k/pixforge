@@ -4,6 +4,7 @@ import { RotateCw, ScanFace } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/api/client'
 import type { ImageInfo, Region, Settings, Stage, TileSession } from '@/api/types'
+import { modelSettingsKey, postOf } from '@/api/types'
 import { tileBus, useStore } from '@/state/store'
 import { applyAspect, clampRect, CropOverlay } from './CropOverlay'
 import { TileCanvas, tileKey, tilesIn } from './TileCanvas'
@@ -302,7 +303,8 @@ export function Viewer({
   const settingsKey = JSON.stringify(settings)
   const tileStage = effectiveStage === 'original' ? null : effectiveStage
   // The crop only limits which tiles are computed; their content stays valid.
-  const sessKey = `${img.id}|${tileStage}|${JSON.stringify(settings ? { ...settings, crop: null } : null)}`
+  // Nor does the finishing: the backend applies it per tile request, without a model run.
+  const sessKey = `${img.id}|${tileStage}|${settings ? modelSettingsKey(settings) : ''}`
   const cropKey = keyOf(crop)
   useEffect(() => {
     if (!api || !settings || !tileStage) return
@@ -563,6 +565,7 @@ export function Viewer({
             height={box.h}
             clip={viewMode === 'split' ? `inset(0 0 0 ${Math.max(0, splitX)}px)` : 'none'}
             area={area}
+            post={settings ? postOf(settings) : { sh: 0, dm: 0, gr: 0 }}
           />
         )}
         {facesOn &&

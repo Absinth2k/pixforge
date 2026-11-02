@@ -79,7 +79,11 @@
     "nonCommercial": "non-commercial",
     "onlyLargest": "Largest face only",
     "reset": "Reset",
-    "applyAll": "Apply to all"
+    "applyAll": "Apply to all",
+    "fineOn": "On",
+    "fineOff": "Off",
+    "fineToggleHint": "Switch the finishing on and off to compare. The values are kept; when off it is not exported either.",
+    "graphicsOnPhoto": "These models are trained on clean, downscaled images such as graphics and renderings. On camera and phone photos they turn noise, sharpening and JPEG traces into mosaic patterns. For photos choose “Photos” or “Photos, sharper”."
   },
   "batch": {
     "title": "Queue",

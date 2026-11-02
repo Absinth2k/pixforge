@@ -5,10 +5,12 @@ import type {
   Job,
   ModelInfo,
   Region,
+  Post,
   Settings,
   Stage,
   TileSession
 } from './types'
+import { wireSettings } from './types'
 
 export type PreviewKind = 'exact' | 'approx' | 'original'
 
@@ -64,9 +66,14 @@ export class Api {
     this.req('POST', '/api/images', { paths })
   removeImage = (id: string): Promise<unknown> => this.req('DELETE', `/api/images/${id}`)
   estimate = (imageId: string, settings: Settings, signal?: AbortSignal): Promise<Estimate> =>
-    this.req('POST', '/api/estimate', { image_id: imageId, settings }, signal)
+    this.req(
+      'POST',
+      '/api/estimate',
+      { image_id: imageId, settings: wireSettings(settings) },
+      signal
+    )
   submitJob = (imageId: string, settings: Settings): Promise<Job> =>
-    this.req('POST', '/api/jobs', { image_id: imageId, settings })
+    this.req('POST', '/api/jobs', { image_id: imageId, settings: wireSettings(settings) })
   jobs = (): Promise<{ jobs: Job[]; paused: boolean }> => this.req('GET', '/api/jobs')
   cancelJob = (id: string): Promise<unknown> => this.req('POST', `/api/jobs/${id}/cancel`)
   pause = (paused: boolean): Promise<unknown> =>
@@ -80,10 +87,21 @@ export class Api {
     focus: Region | null,
     signal?: AbortSignal
   ): Promise<TileSession> =>
-    this.req('POST', '/api/tiles', { image_id: imageId, settings, stage, focus }, signal)
+    this.req(
+      'POST',
+      '/api/tiles',
+      { image_id: imageId, settings: wireSettings(settings), stage, focus },
+      signal
+    )
 
-  tileUrl(sid: string, i: number, j: number, level: number): string {
-    return `${this.base}/api/tiles/${sid}/${i}/${j}/${level}?t=${encodeURIComponent(this.token)}`
+  tileUrl(sid: string, i: number, j: number, level: number, post?: Post): string {
+    const q = new URLSearchParams({ t: this.token })
+    if (post) {
+      q.set('sh', String(post.sh))
+      q.set('dm', String(post.dm))
+      q.set('gr', String(post.gr))
+    }
+    return `${this.base}/api/tiles/${sid}/${i}/${j}/${level}?${q}`
   }
 
   thumbUrl(id: string): string {
@@ -120,7 +138,7 @@ export class Api {
       headers: { 'X-Pixforge-Token': this.token, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         image_id: imageId,
-        settings,
+        settings: wireSettings(settings),
         region,
         out_w: outW,
         out_h: outH,
