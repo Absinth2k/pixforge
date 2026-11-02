@@ -84,3 +84,60 @@ def test_naming(tmp_path: Path) -> None:
         is None
     )
     assert naming.expand('a<b>:"c', src, 2, "m", 1, 1) == "a_b___c"
+
+
+def _gray_icc(gamma: float = 2.2) -> bytes:
+    """A minimal ICC v2 grayscale display profile (desc, wtpt, kTRC), built here so that no
+    third-party profile has to live in the repository."""
+    import struct
+
+    def tag_desc(text: str) -> bytes:
+        a = text.encode("ascii") + b"\0"
+        return b"desc\0\0\0\0" + struct.pack(">I", len(a)) + a + b"\0" * 4 + b"\0" * 4 + b"\0" * 71
+
+    wtpt = b"XYZ \0\0\0\0" + struct.pack(">iii", 63190, 65536, 54061)  # D50 in s15.16
+    ktrc = b"curv\0\0\0\0" + struct.pack(">IH", 1, round(gamma * 256)) + b"\0\0"
+    tags = [(b"desc", tag_desc("Test Gray")), (b"wtpt", wtpt), (b"kTRC", ktrc)]
+    offset = 128 + 4 + 12 * len(tags)
+    table, data = b"", b""
+    for sig, body in tags:
+        body += b"\0" * (-len(body) % 4)
+        table += sig + struct.pack(">II", offset + len(data), len(body))
+        data += body
+    size = offset + len(data)
+    header = (
+        struct.pack(">I", size)
+        + b"lcms"
+        + struct.pack(">I", 0x02100000)
+        + b"mntr"
+        + b"GRAY"
+        + b"XYZ "
+        + b"\0" * 12
+        + b"acsp"
+        + b"\0" * 28  # platform, flags, manufacturer, model, attributes, intent
+        + struct.pack(">iii", 63190, 65536, 54061)
+        + b"\0" * 48
+    )
+    assert len(header) == 128
+    return header + struct.pack(">I", len(tags)) + table + data
+
+
+def test_grayscale_jpeg_with_gray_profile_opens(tmp_path: Path) -> None:
+    """Black-and-white JPEGs often carry a gray profile; it used to fail the RGB transform."""
+    ramp = np.tile(np.linspace(0, 255, 64).astype(np.uint8), (32, 1))
+    p = tmp_path / "sw.jpg"
+    Image.fromarray(ramp, "L").save(p, quality=95, icc_profile=_gray_icc())
+    img = load_image(p)
+    assert img.rgb.shape == (32, 64, 3) and img.icc is None
+    assert img.meta.get("converted_from") == "Test Gray"
+    assert np.abs(img.rgb[..., 0] - img.rgb[..., 2]).max() < 0.02  # stays neutral gray
+    assert np.all(np.diff(img.rgb[16, :, 1]) >= -0.01)  # tone order kept
+
+
+def test_unusable_profile_is_ignored(tmp_path: Path) -> None:
+    lab = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB")).tobytes()
+    p = tmp_path / "lab.jpg"
+    Image.fromarray(np.full((16, 16, 3), 128, np.uint8)).save(p, icc_profile=lab)
+    img = load_image(p)
+    assert img.rgb.shape == (16, 16, 3)
+    assert "ignoriert" in str(img.meta.get("color_warning"))

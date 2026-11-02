@@ -6,11 +6,15 @@ Models are trained on sRGB images. Policy:
   export. On request they are converted to sRGB through a 33^3 3D-LUT built with LittleCMS
   and trilinear interpolation, which keeps 16-bit smoothness.
 - Files without a profile are assumed to be sRGB.
+- Grayscale profiles (black-and-white JPEGs) are applied as a tone curve, gray -> sRGB.
+- A profile that cannot be applied (broken, CMYK, Lab, ...) is ignored with a log warning:
+  the image still opens, as if it were sRGB.
 """
 
 from __future__ import annotations
 
 import io
+import logging
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -19,6 +23,8 @@ from PIL import Image, ImageCms
 
 if TYPE_CHECKING:
     from pixforge.core.io import ImageData
+
+log = logging.getLogger(__name__)
 
 LUT_SIZE = 33
 
@@ -49,6 +55,36 @@ def profile_name(icc: bytes | None) -> str:
         return (ImageCms.getProfileDescription(_profile(icc)) or "ICC").strip()
     except Exception:
         return "ICC"
+
+
+def colour_space(icc: bytes) -> str:
+    """ICC data colour space: "RGB", "GRAY", "CMYK", "LAB", ... ("?" if unreadable)."""
+    try:
+        return str(_profile(icc).profile.xcolor_space).strip().upper()
+    except Exception:
+        return "?"
+
+
+@lru_cache(maxsize=4)
+def _gray_ramp(src: bytes) -> np.ndarray:
+    """(256, 3) float32: sRGB colour of every gray level of a grayscale profile."""
+    ramp = Image.fromarray(np.arange(256, dtype=np.uint8)[None, :], "L")
+    out = ImageCms.profileToProfile(
+        ramp,
+        _profile(src),
+        _profile(srgb_profile_bytes()),
+        renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
+        outputMode="RGB",
+    )
+    return np.asarray(out, np.float32)[0] / 255.0
+
+
+def _apply_gray_ramp(rgb: np.ndarray, ramp: np.ndarray) -> np.ndarray:
+    """Gray level (luma) -> sRGB, linear interpolation (keeps 16-bit smoothness)."""
+    y = np.clip(rgb @ np.array([0.299, 0.587, 0.114], np.float32), 0.0, 1.0) * 255.0
+    i0 = np.minimum(y.astype(np.int32), 254)
+    f = (y - i0)[..., None]
+    return (ramp[i0] * (1.0 - f) + ramp[i0 + 1] * f).astype(np.float32)
 
 
 def _transform_u8(arr_u8: np.ndarray, src: bytes, dst: bytes) -> np.ndarray:
@@ -99,6 +135,23 @@ def to_working_space(data: ImageData) -> None:
         data.icc = None
         return
     assert icc is not None
+    try:
+        _convert(data, icc)
+    except Exception as exc:
+        log.warning("colour profile %r ignored: %s", profile_name(icc), exc)
+        data.icc = None
+        data.meta["color_warning"] = f"Farbprofil „{profile_name(icc)}“ ignoriert"
+
+
+def _convert(data: ImageData, icc: bytes) -> None:
+    space = colour_space(icc)
+    if space == "GRAY":
+        data.rgb = _apply_gray_ramp(data.rgb, _gray_ramp(icc))
+        data.icc = None
+        data.meta["converted_from"] = profile_name(icc)
+        return
+    if space != "RGB":
+        raise ValueError(f"profile colour space {space} does not match RGB pixels")
     if data.bit_depth <= 8:
         u8 = (np.clip(data.rgb, 0, 1) * 255 + 0.5).astype(np.uint8)
         data.rgb = _transform_u8(u8, icc, srgb_profile_bytes()).astype(np.float32) / 255.0
