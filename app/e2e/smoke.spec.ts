@@ -90,6 +90,12 @@ test('start screen, load an image, preview renders', async () => {
     // denoise-only switches the task and the output size
     await page.getByRole('button', { name: /Nur entrauschen|Denoise only/ }).click()
     await expect(page.getByText('480 × 320').last()).toBeVisible()
+    // export: visible feedback right after the click (the tiny test image may already be done)
+    const exportBtn = page.getByRole('button', { name: /Exportieren|Export|Wartet|Exportiere/ })
+    await exportBtn.click()
+    await expect(
+      page.getByText(/Bild wird verarbeitet|Image is being processed|Gespeichert|Saved/).first()
+    ).toBeVisible()
   } finally {
     await app.close()
   }

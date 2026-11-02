@@ -20,7 +20,12 @@
     "zoom": "Zoom",
     "fit": "Einpassen",
     "export": "Exportieren",
-    "theme": "Hell/Dunkel umschalten"
+    "theme": "Hell/Dunkel umschalten",
+    "waiting": "Wartet …",
+    "exporting": "Exportiere … {{pct}} %",
+    "alreadyQueued": "Dieses Bild wird mit diesen Einstellungen schon verarbeitet.",
+    "queued_one": "Bild wird verarbeitet. Fortschritt im Knopf und unten in der Statuszeile.",
+    "queued_other": "{{count}} Bilder werden verarbeitet. Fortschritt unten in der Statuszeile."
   },
   "empty": {
     "title": "Bilder hierher ziehen",

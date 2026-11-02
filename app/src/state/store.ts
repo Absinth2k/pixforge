@@ -7,8 +7,10 @@ import {
   type Job,
   type ModelInfo,
   type Settings,
-  type Stage
+  type Stage,
+  wireSettings
 } from '@/api/types'
+import i18n from '@/i18n'
 import { applyTheme, type ThemeName } from '@/theme/theme'
 
 export type ViewMode = 'single' | 'split' | 'side'
@@ -18,6 +20,11 @@ export const tileBus = new EventTarget()
 
 /** Closes the event socket of the previous backend (after a restart). */
 let closeEvents: (() => void) | null = null
+
+/** image id + settings of every submitted job: the same export is not queued twice. */
+const jobKeys = new Map<string, string>()
+const exportKey = (id: string, s: Settings): string => `${id}|${JSON.stringify(wireSettings(s))}`
+const ACTIVE = new Set(['queued', 'running'])
 
 /** A request failed because the backend is gone (closed, crashed, restarting). */
 function connectionMessage(e: unknown): string {
@@ -252,10 +259,29 @@ export const useStore = create<State>((set, get) => ({
   async exportImages(ids) {
     const { api, settings } = get()
     if (!api) return
+    let queued = 0
+    let already = 0
     try {
       for (const id of ids) {
-        const job = await api.submitJob(id, settings[id] ?? defaultSettings())
+        const st = settings[id] ?? defaultSettings()
+        const key = exportKey(id, st)
+        // a second click with unchanged settings must not compute the same file again
+        const busy = Object.values(get().jobs).some(
+          (j) => ACTIVE.has(j.status) && jobKeys.get(j.id) === key
+        )
+        if (busy) {
+          already++
+          continue
+        }
+        const job = await api.submitJob(id, st)
+        jobKeys.set(job.id, key)
+        queued++
         set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }))
+      }
+      if (already && !queued) {
+        set({ toast: { text: i18n.t('toolbar.alreadyQueued'), kind: 'info' } })
+      } else if (queued) {
+        set({ toast: { text: i18n.t('toolbar.queued', { count: queued }), kind: 'info' } })
       }
     } catch (e) {
       set({ toast: { text: connectionMessage(e), kind: 'error' } })

@@ -1,5 +1,6 @@
 import { Crop, Download, FolderOpen, FolderPlus, Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import type { Job } from '@/api/types'
 import { useStore, type ViewMode } from '@/state/store'
 import { Segmented } from './ui'
 
@@ -23,6 +24,13 @@ export function Toolbar({
   const set = useStore((s) => s.set)
   const setTheme = useStore((s) => s.setTheme)
   const exportImages = useStore((s) => s.exportImages)
+  // the export of the selected image that is waiting or running, for feedback in the button
+  const activeJob = useStore((s) => {
+    let last: Job | undefined
+    for (const j of Object.values(s.jobs))
+      if (j.image_id === s.selectedId && (j.status === 'queued' || j.status === 'running')) last = j
+    return last
+  })
   const cropEditing = useStore((s) => s.cropEditing)
   const crop = useStore((s) => (s.selectedId ? s.settings[s.selectedId]?.crop : null))
   const updateSettings = useStore((s) => s.updateSettings)
@@ -121,8 +129,21 @@ export function Toolbar({
         title="Strg+E"
         className="flex h-8 items-center gap-2 rounded-btn bg-accent px-3.5 font-semibold text-on-accent transition-colors duration-100 hover:bg-accent-hover disabled:opacity-40"
       >
-        <Download size={16} strokeWidth={2} aria-hidden="true" />
-        {t('toolbar.export')}
+        {activeJob ? (
+          <span
+            className="pf-spin inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent"
+            aria-hidden="true"
+          />
+        ) : (
+          <Download size={16} strokeWidth={2} aria-hidden="true" />
+        )}
+        <span data-testid="export-label">
+          {activeJob
+            ? activeJob.status === 'queued'
+              ? t('toolbar.waiting')
+              : t('toolbar.exporting', { pct: Math.round(activeJob.progress * 100) })
+            : t('toolbar.export')}
+        </span>
       </button>
     </div>
   )

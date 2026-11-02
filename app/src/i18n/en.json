@@ -20,7 +20,12 @@
     "zoom": "Zoom",
     "fit": "Fit",
     "export": "Export",
-    "theme": "Toggle light/dark"
+    "theme": "Toggle light/dark",
+    "waiting": "Waiting …",
+    "exporting": "Exporting … {{pct}} %",
+    "alreadyQueued": "This image is already being processed with these settings.",
+    "queued_one": "Image is being processed. Progress in the button and in the status bar.",
+    "queued_other": "{{count}} images are being processed. Progress in the status bar."
   },
   "empty": {
     "title": "Drop images here",
