@@ -13,6 +13,17 @@ import { applyTheme, type ThemeName } from '@/theme/theme'
 
 export type ViewMode = 'single' | 'split' | 'side'
 
+/** Background tile events ("tile", "tiles") from the backend, for the viewer. */
+export const tileBus = new EventTarget()
+
+/** A request failed because the backend is gone (closed, crashed, restarting). */
+function connectionMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /failed to fetch|networkerror|load failed/i.test(msg)
+    ? 'Keine Verbindung zum Rechenkern. Pixforge bitte neu starten, falls das so bleibt.'
+    : msg
+}
+
 export interface ViewState {
   /** screen px per output px; null = fit */
   zoom: number | null
@@ -96,7 +107,13 @@ export const useStore = create<State>((set, get) => ({
     }
     const api = new Api(info.port, info.token)
     set({ api, backendError: null, backendLog: null })
-    const [health, models, jobs] = await Promise.all([api.health(), api.models(), api.jobs()])
+    let health: Health, models: ModelInfo[], jobs: { jobs: Job[]; paused: boolean }
+    try {
+      ;[health, models, jobs] = await Promise.all([api.health(), api.models(), api.jobs()])
+    } catch (e) {
+      set({ backendError: connectionMessage(e) })
+      return
+    }
     const byId: Record<string, Job> = {}
     for (const j of jobs.jobs) byId[j.id] = j
     set({ health, models, jobs: byId, queuePaused: jobs.paused })
@@ -114,6 +131,8 @@ export const useStore = create<State>((set, get) => ({
         }
       } else if (ev.type === 'model') {
         set({ loadingModel: ev.loading ? String(ev.id) : null })
+      } else if (ev.type === 'tile' || ev.type === 'tiles') {
+        tileBus.dispatchEvent(new CustomEvent('tile', { detail: ev }))
       } else if (ev.type === 'queue' && typeof ev.paused === 'boolean') {
         set({ queuePaused: ev.paused })
       }
@@ -131,7 +150,13 @@ export const useStore = create<State>((set, get) => ({
     const known = new Set(get().images.map((i) => i.path.toLowerCase()))
     const fresh = paths.filter((p) => !known.has(p.toLowerCase()))
     if (!fresh.length) return
-    const res = await api.addImages(fresh)
+    let res: Awaited<ReturnType<Api['addImages']>>
+    try {
+      res = await api.addImages(fresh)
+    } catch (e) {
+      set({ toast: { text: connectionMessage(e), kind: 'error' } })
+      return
+    }
     set((s) => {
       const settings = { ...s.settings }
       for (const img of res.images) {
@@ -152,7 +177,11 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async removeImage(id) {
-    await get().api?.removeImage(id)
+    try {
+      await get().api?.removeImage(id)
+    } catch {
+      /* gone on the backend side anyway: remove it from the list */
+    }
     set((s) => {
       const images = s.images.filter((i) => i.id !== id)
       const idx = s.images.findIndex((i) => i.id === id)
@@ -190,9 +219,13 @@ export const useStore = create<State>((set, get) => ({
   async exportImages(ids) {
     const { api, settings } = get()
     if (!api) return
-    for (const id of ids) {
-      const job = await api.submitJob(id, settings[id] ?? defaultSettings())
-      set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }))
+    try {
+      for (const id of ids) {
+        const job = await api.submitJob(id, settings[id] ?? defaultSettings())
+        set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }))
+      }
+    } catch (e) {
+      set({ toast: { text: connectionMessage(e), kind: 'error' } })
     }
   },
 

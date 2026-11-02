@@ -125,6 +125,11 @@ class JobQueue:
         with self._lock:
             self.jobs = [j for j in self.jobs if j.status in ("queued", "running")]
 
+    @property
+    def busy(self) -> bool:
+        """An export is being processed right now."""
+        return any(j.status == "running" for j in self.jobs)
+
     def list(self) -> list[dict[str, object]]:
         with self._lock:
             return [j.public() for j in self.jobs]

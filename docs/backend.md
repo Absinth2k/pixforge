@@ -229,6 +229,32 @@ und Detail-Erhalt (Laplace-Energie im Verhältnis zum Original, auf halber Aufl�
   130 / 129 dB. GFPGAN läuft mit festem statt zufälligem Rauscheingang, damit Vorschau und
   Export identisch sind.
 
+## 4c. Vorschau: schnelle Näherung und echte Kacheln (Etappe 4)
+
+Ein Modell auf einer stark verkleinerten Kopie des Bildes ist keine brauchbare Vorschau. Bei
+„Einpassen“ lief HAT auf etwa 275 × 180 px und erfand Strukturen. Gemessen bei 35 % Zoom
+(Pixel-8-Foto): Mauerstruktur und Stoffdetails gehen verloren. Bei einem verrauschten CR3 war
+die Näherung dagegen *schärfer* als das echte Ergebnis, weil das Verkleinern das Rauschen
+schon entfernt hatte. Sie war also in beide Richtungen unzuverlässig.
+
+- **Schnelle Vorschau** (`server/preview.py`): Ab 100 % Zoom laufen die echten Quellpixel
+  durch das Modell, das Ergebnis ist exakt. Zwischen 50 % und 100 % ist es eine Näherung
+  (Modell bei nativem Faktor auf leicht verkleinerter Quelle). Darunter wird das Original
+  gezeigt, gekennzeichnet in der Statuszeile.
+- **Echte Kacheln** (`server/tiles.py`): Ein Hintergrund-Thread rechnet das Bild in einem
+  festen Raster wie der Export: Rasterweite = Modellkachel − 2 × 32 px Kontext, also 320 px
+  bei 16 GB. Gesichter, deren 512er-Ausrichtungsquadrat eine Kachel berührt, werden ganz
+  mitgerechnet, deshalb gibt es keine Naht durch Gesichter. Jede Kachel wird als
+  JPEG-Pyramide gespeichert (1, 1/2, 1/4 …), die App zeichnet die Stufe, die zum Bildschirm
+  passt. Reihenfolge: sichtbarer Bereich zuerst. Priorität im GPU-Gate: Vorschau > Export >
+  Kacheln. Pro Bild und Einstellung gibt es eine Sitzung; der Ausschnitt begrenzt nur, welche
+  Kacheln gerechnet werden. Speichergrenze für alle Sitzungen: 1 GB.
+- **Messung** (20-MP-CR3, „Fotos“ 4×, RX 9070 XT): etwa 1,3 s pro Kachel, das ganze Bild
+  nach rund 4,5 min. Eine 100-%-Vorschau wartet daneben höchstens eine Modellkachel
+  (1,5–1,6 s statt 0,8–1,5 s). Pyramide pro Kachel: 145 KB + 30 KB + 10 KB + …
+- Eine JPEG-Qualitätsschätzung pro Bild (`Settings.jpeg_qf`), damit Ausschnitte und Kacheln
+  dieselbe FBCNN-Stärke wie der Export bekommen.
+
 ## 5. PyTorch mit ROCm unter Windows (optional, nur Entwicklung)
 
 AMD bietet offizielle Windows-Wheels an: PyTorch 2.9.1 + ROCm 7.2.1, nur Python 3.12,

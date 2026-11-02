@@ -40,7 +40,11 @@
     "divider": "Vorher/Nachher-Trenner",
     "error": "Vorschau fehlgeschlagen: {{msg}}",
     "facesHint": "Klick auf einen Rahmen schließt das Gesicht aus",
-    "loadingModel": "Modell wird geladen …"
+    "loadingModel": "Modell wird geladen …",
+    "refining": "Echtes Ergebnis wird berechnet … {{pct}} %",
+    "refiningPaused": "Echtes Ergebnis pausiert, solange exportiert wird ({{pct}} %)",
+    "refiningError": "Echtes Ergebnis fehlgeschlagen: {{msg}}",
+    "refiningHint": "Bis dahin zeigt die Vorschau eine Näherung bzw. beim Herauszoomen das Original."
   },
   "panel": {
     "title": "Einstellungen",

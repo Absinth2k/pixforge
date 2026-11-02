@@ -14,7 +14,7 @@ import time
 import uuid
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -46,6 +46,7 @@ from pixforge.models import registry
 from pixforge.server import preview as pv
 from pixforge.server.gate import Gate, GatedBackend
 from pixforge.server.jobs import ExportTarget, JobQueue
+from pixforge.server.tiles import TileRenderer
 
 log = logging.getLogger(__name__)
 MAX_LOADED = 4  # full-resolution images kept in RAM (analysis is always kept)
@@ -120,6 +121,14 @@ class PreviewIn(BaseModel):
     channel: Literal["view", "base"] = "view"
 
 
+class TilesIn(BaseModel):
+    image_id: str
+    settings: SettingsIn = SettingsIn()
+    stage: Literal["denoised", "result"] = "result"
+    #: visible region (source px): these tiles are computed first
+    focus: RegionIn | None = None
+
+
 class AddImagesIn(BaseModel):
     paths: list[str]
 
@@ -163,6 +172,7 @@ class Entry:
 class ImageStore:
     def __init__(self, pipeline: Pipeline) -> None:
         self.pipeline = pipeline
+        self.on_remove: Any = None
         self.entries: OrderedDict[str, Entry] = OrderedDict()
         self._lock = threading.Lock()
 
@@ -217,6 +227,8 @@ class ImageStore:
     def remove(self, eid: str) -> None:
         with self._lock:
             self.entries.pop(eid, None)
+        if self.on_remove:
+            self.on_remove(eid)
 
     def _evict(self) -> None:
         loaded = [e for e in self.entries.values() if e.img is not None]
@@ -272,7 +284,7 @@ def create_app(
 
             inner = OnnxBackend(device)
             inner.load(model_id)
-        return GatedBackend(inner, gate)
+        return GatedBackend(inner, gate, model_id, reacquire=lambda mid: pipeline.backend(mid))
 
     pipeline = Pipeline(device=device, backend_factory=gated_factory, detector=detector)
     store = ImageStore(pipeline)
@@ -282,11 +294,47 @@ def create_app(
         {"type": "model", "id": mid, "loading": loading}
     )
     preview_gen: dict[str, int] = {}
+    gate.jobs_active = lambda: queue.busy
+    jpeg_qf: dict[str, float | None] = {}
+
+    def with_qf(image_id: str, img: ImageData, s: Settings) -> Settings:
+        """One JPEG quality estimate per image, so regions and tiles match the export."""
+        if s.jpeg_strength <= 0 or s.jpeg_qf is not None:
+            return s
+        if image_id not in jpeg_qf:
+            jpeg_qf[image_id] = pipeline.estimate_jpeg_qf(img.rgb)
+        return replace(s, jpeg_qf=jpeg_qf[image_id])
+
+    _tile_px: list[int] = []
+
+    def tile_size() -> int:
+        """Grid size of the background tiles: one model tile minus the context margin."""
+        if not _tile_px:
+            from pixforge.backends.onnx_backend import list_devices
+            from pixforge.core.pipeline import CROP_MARGIN, TILE_SIZES
+
+            try:
+                devs = list_devices()
+                d = devs[0]
+                if device == "cpu":
+                    d = next(x for x in devs if x.kind == "cpu")
+                vram = d.vram_mb if d.kind == "gpu" else None
+            except Exception:  # pragma: no cover - device query failed
+                vram = None
+            t = 192
+            if vram:
+                t = next((t for t in TILE_SIZES if 500 + 38 * t * t / 1024 <= vram * 0.5), 128)
+            _tile_px.append(max(64, t - 2 * CROP_MARGIN))
+        return _tile_px[0]
+
+    tiles = TileRenderer(pipeline, store.image, gate, events.publish, tile_size, with_qf)
+    store.on_remove = tiles.drop_image
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
         events.loop = asyncio.get_running_loop()
         yield
+        tiles.stop()
 
     app = FastAPI(title="Pixforge", version=__version__, lifespan=lifespan)
     app.add_middleware(
@@ -294,7 +342,7 @@ def create_app(
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Preview-Ms"],
+        expose_headers=["X-Preview-Ms", "X-Preview-Kind"],
     )
     app.state.pipeline, app.state.store, app.state.queue, app.state.events = (
         pipeline,
@@ -302,6 +350,7 @@ def create_app(
         queue,
         events,
     )
+    app.state.tiles = tiles
 
     def auth(request: Request) -> None:
         got = request.headers.get("x-pixforge-token") or request.query_params.get("t")
@@ -402,13 +451,13 @@ def create_app(
         settings = body.settings.to_settings()
         region = pv.Region(**body.region.model_dump())
 
-        def work() -> np.ndarray:
+        def work() -> tuple[np.ndarray, str]:
             with gate.preview():
                 return pv.render(
                     pipeline,
                     img,
                     an,
-                    settings,
+                    with_qf(body.image_id, img, settings),
                     region,
                     body.out_w,
                     body.out_h,
@@ -418,7 +467,7 @@ def create_app(
 
         t = time.perf_counter()
         try:
-            rgb = await run_in_threadpool(work)
+            rgb, kind = await run_in_threadpool(work)
         except Cancelled:
             return Response(status_code=204)
         except registry.ModelNotInstalled as exc:
@@ -426,16 +475,50 @@ def create_app(
         ms = round((time.perf_counter() - t) * 1000)
         r = body.region
         log.info(
-            "preview %s %s region %dx%d -> %dx%d: %d ms",
+            "preview %s %s %s region %dx%d -> %dx%d: %d ms",
             body.channel,
             body.stage,
+            kind,
             r.w,
             r.h,
             body.out_w,
             body.out_h,
             ms,
         )
-        return Response(_jpeg(rgb, 90), media_type="image/jpeg", headers={"X-Preview-Ms": str(ms)})
+        return Response(
+            _jpeg(rgb, 90),
+            media_type="image/jpeg",
+            headers={"X-Preview-Ms": str(ms), "X-Preview-Kind": kind},
+        )
+
+    @app.post("/api/tiles", dependencies=dep)
+    def open_tiles(body: TilesIn) -> dict[str, Any]:
+        """Start (or continue) the background rendering of the real result."""
+        e = store.get(body.image_id)
+        s = body.settings.to_settings()
+        f = body.focus
+        try:
+            sess = tiles.open(
+                e.id,
+                e.info["width"],
+                e.info["height"],
+                s,
+                body.stage,
+                (f.x, f.y, f.w, f.h) if f else None,
+                s.crop,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return sess.public()
+
+    @app.get("/api/tiles/{sid}/{i}/{j}/{level}", dependencies=dep)
+    def tile_image(sid: str, i: int, j: int, level: int) -> Response:
+        data = tiles.tile(sid, i, j, level)
+        if data is None:
+            raise HTTPException(404, "Kachel nicht vorhanden")
+        return Response(
+            data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"}
+        )
 
     @app.post("/api/estimate", dependencies=dep)
     def estimate(body: EstimateIn) -> dict[str, Any]:

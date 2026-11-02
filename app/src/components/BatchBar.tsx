@@ -27,7 +27,7 @@ export function BatchBar() {
         <span className="flex-1" />
         <button
           type="button"
-          onClick={() => void api?.pause(!paused)}
+          onClick={() => void api?.pause(!paused).catch(() => undefined)}
           className="flex h-[26px] items-center gap-1.5 rounded-btn border border-line bg-raised px-2.5 text-[12px] text-text hover:bg-hover"
         >
           {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}

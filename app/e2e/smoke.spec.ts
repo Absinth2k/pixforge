@@ -75,6 +75,9 @@ test('start screen, load an image, preview renders', async () => {
     const result = page.locator('img[alt^="Pixforge"]')
     await expect(result).toBeVisible()
     await expect(page.getByText(/Vorschau wird berechnet|Computing preview/)).toBeHidden()
+    // the real result arrives as background tiles and replaces the quick preview
+    await expect(page.getByTestId('tile-canvas')).toBeAttached({ timeout: 30_000 })
+    await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 60_000 })
     // the estimate shows the 4x output size
     await expect(page.getByText('1.920 × 1.280')).toBeVisible()
     // denoise-only switches the task and the output size

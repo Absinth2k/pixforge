@@ -1,4 +1,16 @@
-import type { Estimate, Health, ImageInfo, Job, ModelInfo, Region, Settings, Stage } from './types'
+import type {
+  Estimate,
+  Health,
+  ImageInfo,
+  Job,
+  ModelInfo,
+  Region,
+  Settings,
+  Stage,
+  TileSession
+} from './types'
+
+export type PreviewKind = 'exact' | 'approx' | 'original'
 
 export class ApiError extends Error {
   constructor(
@@ -60,6 +72,20 @@ export class Api {
   pause = (paused: boolean): Promise<unknown> =>
     this.req('POST', `/api/queue/pause?paused=${paused}`)
 
+  /** Start or continue the background tiles; ``focus`` (visible region) goes first. */
+  tiles = (
+    imageId: string,
+    settings: Settings,
+    stage: Exclude<Stage, 'original'>,
+    focus: Region | null,
+    signal?: AbortSignal
+  ): Promise<TileSession> =>
+    this.req('POST', '/api/tiles', { image_id: imageId, settings, stage, focus }, signal)
+
+  tileUrl(sid: string, i: number, j: number, level: number): string {
+    return `${this.base}/api/tiles/${sid}/${i}/${j}/${level}?t=${encodeURIComponent(this.token)}`
+  }
+
   thumbUrl(id: string): string {
     return `${this.base}/api/images/${id}/thumb?t=${encodeURIComponent(this.token)}`
   }
@@ -87,7 +113,7 @@ export class Api {
     stage: Stage,
     signal?: AbortSignal,
     channel: 'view' | 'base' = 'view'
-  ): Promise<{ blob: Blob; ms: number } | null> {
+  ): Promise<{ blob: Blob; ms: number; kind: PreviewKind } | null> {
     const res = await fetch(this.base + '/api/preview', {
       method: 'POST',
       signal,
@@ -112,7 +138,11 @@ export class Api {
       }
       throw new ApiError(res.status, msg)
     }
-    return { blob: await res.blob(), ms: Number(res.headers.get('X-Preview-Ms') ?? 0) }
+    return {
+      blob: await res.blob(),
+      ms: Number(res.headers.get('X-Preview-Ms') ?? 0),
+      kind: (res.headers.get('X-Preview-Kind') as PreviewKind | null) ?? 'exact'
+    }
   }
 
   /** WebSocket with automatic reconnect. Returns a function that closes it. */

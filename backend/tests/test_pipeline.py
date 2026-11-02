@@ -261,6 +261,37 @@ def test_crop_keeps_only_faces_inside_and_shifts_them() -> None:
     assert res.image.rgb[60, 60].mean() > 0.9  # face area inside the crop got restored
 
 
+def test_crop_respects_excluded_faces_by_their_index_in_the_whole_image() -> None:
+    """``exclude`` lists indices of the whole image's faces, not of the crop's."""
+    outside = Face((10, 10, 40, 40), FFHQ_512 / 12.8 + np.array([10, 10], np.float32), 0.9)
+    inside = Face((110, 110, 40, 40), FFHQ_512 / 12.8 + np.array([110, 110], np.float32), 0.9)
+
+    class TwoFaces:
+        def detect(self, rgb: np.ndarray, min_size: float = 0) -> list[Face]:
+            return [outside, inside]
+
+    img = _image(300, 300)
+    img.rgb[:] = 0.0
+
+    def run(exclude: tuple[int, ...]) -> int:
+        return (
+            _pipe(faces=TwoFaces())
+            .process(
+                img,
+                Settings(
+                    crop=(100, 100, 100, 100),
+                    scale=2,
+                    denoise=DenoiseSettings(mode="off"),
+                    faces=FaceSettings(enabled=True, strength=100, exclude=exclude),
+                ),
+            )
+            .faces_restored
+        )
+
+    assert run((1,)) == 0  # the face inside the crop is face 1 of the image
+    assert run((0,)) == 1
+
+
 def test_photo_model_does_not_denoise_with_a_cached_clean_analysis() -> None:
     """The server caches an analysis made for 'clean'; a photo model must not denoise."""
     from pixforge.core.pipeline import Analysis

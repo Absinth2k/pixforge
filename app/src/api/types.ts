@@ -63,6 +63,26 @@ export interface ImageInfo {
   color_space: string
 }
 
+/** Background rendering of the real result (backend/src/pixforge/server/tiles.py). */
+export interface TileSession {
+  id: string
+  image_id: string
+  /** grid size in source px */
+  tile: number
+  factor: number
+  cols: number
+  rows: number
+  width: number
+  height: number
+  /** pyramid levels per tile: level k is the output downsampled by 2^k */
+  levels: number
+  done: [number, number][]
+  done_count: number
+  total: number
+  state: 'waiting' | 'running' | 'paused' | 'done' | 'error'
+  error: string | null
+}
+
 export interface DeviceInfo {
   name: string
   kind: 'gpu' | 'cpu'

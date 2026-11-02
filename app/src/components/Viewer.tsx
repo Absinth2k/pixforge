@@ -3,17 +3,24 @@ import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent }
 import { RotateCw, ScanFace } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/api/client'
-import type { ImageInfo, Region, Settings, Stage } from '@/api/types'
-import { useStore } from '@/state/store'
+import type { ImageInfo, Region, Settings, Stage, TileSession } from '@/api/types'
+import { tileBus, useStore } from '@/state/store'
 import { applyAspect, clampRect, CropOverlay } from './CropOverlay'
+import { TileCanvas, tileKey, tilesIn } from './TileCanvas'
 import { nf, Segmented } from './ui'
 
 const PREVIEW_DEBOUNCE_MS = 280
-const BASE_DEBOUNCE_MS = 650
+const TILES_DEBOUNCE_MS = 300
 const ORIGINAL_DEBOUNCE_MS = 60
 const ZOOM_ANIM_MS = 150
 const MAX_OUT = 4096
 const BASE_MAX = 2048
+
+interface Tiles {
+  key: string
+  sess: TileSession
+  done: Set<string>
+}
 const MIN_ZOOM = 0.02
 const MAX_ZOOM = 8
 
@@ -164,8 +171,8 @@ export function Viewer({
   const [box, setBox] = useState({ w: 800, h: 600 })
   const [baseOriginal, setBaseOriginal] = useState<Layer | null>(null)
   const [original, setOriginal] = useState<Layer | null>(null)
-  const [baseResult, setBaseResult] = useBlobLayer()
   const [result, setResult] = useBlobLayer()
+  const [tiles, setTiles] = useState<Tiles | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -239,7 +246,6 @@ export function Viewer({
   // With a crop only its visible part is computed: faster previews, same as the export.
   const region = useMemo(() => (crop ? intersect(visible, crop) : visible), [crop, visible])
   const area = crop ?? { x: 0, y: 0, w: img.width, h: img.height }
-  const coversAll = !!region && region.w >= area.w - 0.5 && region.h >= area.h - 0.5
 
   useEffect(() => {
     const z = vs?.zoom ?? null
@@ -253,10 +259,10 @@ export function Viewer({
     setOriginal(null)
     setBaseOriginal(null)
     setResult(null)
-    setBaseResult(null)
+    setTiles(null)
     setError(null)
     skipAnim.current = true
-  }, [img.id, setResult, setBaseResult])
+  }, [img.id, setResult])
 
   // Base original: the whole image at screen-like resolution, loaded once per image.
   useEffect(() => {
@@ -287,15 +293,80 @@ export function Viewer({
   }, [api, img.id, visibleKey, vw, vh])
 
   const regionKey = keyOf(region)
-  // Zoomed out the processed image is shown smaller than its pixels anyway: request CSS
-  // pixels only (a 1.5x HiDPI screen would otherwise cost 2.25x the GPU time).
+  // Zoomed out the quick preview is only a stand-in until the tiles arrive: CSS pixels
+  // are enough (a 1.5x HiDPI screen would otherwise cost 2.25x the GPU time).
   const [ow, oh] = region ? outSize(region, target.s, MAX_OUT, target.z >= 1) : [1, 1]
 
-  // Processed result for the visible region: debounced, cancellable, stale-while-loading.
+  // ---- background tiles of the real result -----------------------------------------
   const effectiveStage: Stage = viewMode === 'single' || stage !== 'original' ? stage : 'result'
   const settingsKey = JSON.stringify(settings)
+  const tileStage = effectiveStage === 'original' ? null : effectiveStage
+  // The crop only limits which tiles are computed; their content stays valid.
+  const sessKey = `${img.id}|${tileStage}|${JSON.stringify(settings ? { ...settings, crop: null } : null)}`
+  const cropKey = keyOf(crop)
+  useEffect(() => {
+    if (!api || !settings || !tileStage) return
+    const ctrl = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const sess = await api.tiles(img.id, settings, tileStage, visible, ctrl.signal)
+        setTiles((old) => {
+          const done = new Set(sess.done.map(([i, j]) => tileKey(i, j)))
+          if (old && old.sess.id === sess.id) for (const k of old.done) done.add(k)
+          return { key: sessKey, sess, done }
+        })
+      } catch {
+        /* the tiles improve the preview; the quick preview keeps working without them */
+      }
+    }, TILES_DEBOUNCE_MS)
+    return () => {
+      clearTimeout(timer)
+      ctrl.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, img.id, sessKey, cropKey, visibleKey])
+
+  const sid = tiles?.sess.id
+  useEffect(() => {
+    if (!sid) return
+    const on = (e: Event) => {
+      const ev = (e as CustomEvent<Record<string, unknown>>).detail
+      if (ev.session !== sid) return
+      setTiles((old) => {
+        if (!old || old.sess.id !== sid) return old
+        const counts = { done_count: Number(ev.done), total: Number(ev.total) }
+        if (ev.type === 'tile') {
+          const done = new Set(old.done)
+          done.add(tileKey(Number(ev.i), Number(ev.j)))
+          return { ...old, done, sess: { ...old.sess, ...counts } }
+        }
+        const state = ev.state as TileSession['state']
+        const error = (ev.error as string | null) ?? null
+        return { ...old, sess: { ...old.sess, ...counts, state, error } }
+      })
+    }
+    tileBus.addEventListener('tile', on)
+    return () => tileBus.removeEventListener('tile', on)
+  }, [sid])
+
+  // tiles of the current settings only: after a change the old ones are wrong
+  const live = tiles && tiles.key === sessKey ? tiles : null
+  const isDone = (t: [number, number]) => !!live && live.done.has(tileKey(t[0], t[1]))
+  const regionTiles = live && region ? tilesIn(live.sess, region) : []
+  const covered = regionTiles.length > 0 && regionTiles.every(isDone)
+  const visTiles = live ? tilesIn(live.sess, region ?? visible) : []
+  const pct = visTiles.length
+    ? Math.floor((100 * visTiles.filter(isDone).length) / visTiles.length)
+    : 100
+  const refining = !!live && pct < 100
+
+  // ---- quick preview of the visible region: debounced, cancellable, stale-while-loading
   useEffect(() => {
     if (!api || !settings || effectiveStage === 'original' || !region) return
+    if (covered) {
+      setBusy(false) // the real result is already there
+      return
+    }
     const ctrl = new AbortController()
     setBusy(true)
     const timer = setTimeout(async () => {
@@ -303,8 +374,6 @@ export function Viewer({
         const res = await api.preview(img.id, settings, region, ow, oh, effectiveStage, ctrl.signal)
         if (!res) return
         setResult({ url: URL.createObjectURL(res.blob), region })
-        // At fit zoom the region is the whole image: it doubles as the base layer.
-        if (coversAll) setBaseResult({ url: URL.createObjectURL(res.blob), region })
         setError(null)
         setBusy(false)
       } catch (e) {
@@ -318,44 +387,7 @@ export function Viewer({
       ctrl.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, img.id, regionKey, ow, oh, settingsKey, effectiveStage])
-
-  // Base result (whole image) after a settings change while zoomed in, so panning and zooming
-  // out always show processed pixels at least at low resolution.
-  useEffect(() => {
-    if (!api || !settings || effectiveStage === 'original' || coversAll) return
-    const ctrl = new AbortController()
-    const timer = setTimeout(async () => {
-      const fit = geometry(img, factor, paneW, box.h, null)
-      const [bw, bh] = outSize(area, fit.s, BASE_MAX)
-      try {
-        const res = await api.preview(
-          img.id,
-          settings,
-          area,
-          bw,
-          bh,
-          effectiveStage,
-          ctrl.signal,
-          'base'
-        )
-        if (res) setBaseResult({ url: URL.createObjectURL(res.blob), region: area })
-      } catch {
-        /* the base layer is a nicety; the view request reports errors */
-      }
-    }, BASE_DEBOUNCE_MS)
-    return () => {
-      clearTimeout(timer)
-      ctrl.abort()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, img.id, settingsKey, effectiveStage, coversAll])
-
-  // A crop change makes the old processed layers meaningless outside the new crop.
-  const cropKey = keyOf(crop)
-  useEffect(() => {
-    setBaseResult(null)
-  }, [cropKey, setBaseResult])
+  }, [api, img.id, regionKey, ow, oh, settingsKey, effectiveStage, covered])
 
   const ratioFor = (key: string): number | null => {
     const a = ASPECTS.find((x) => x.key === key)?.ratio ?? null
@@ -512,20 +544,25 @@ export function Viewer({
             style={layerStyle(original, g)}
           />
         )}
-        {showResult && baseResult && (
-          <img
-            src={baseResult.url}
-            alt=""
-            draggable={false}
-            style={{ ...layerStyle(baseResult, g), clipPath: resultClip(baseResult) }}
-          />
-        )}
         {showResult && result && (
           <img
             src={result.url}
             alt={resultLabel}
             draggable={false}
             style={{ ...layerStyle(result, g), clipPath: resultClip(result) }}
+          />
+        )}
+        {showResult && live && api && (
+          <TileCanvas
+            api={api}
+            session={live.sess}
+            done={live.done}
+            draw={{ view: g.view, s: g.s, z: g.z }}
+            fetchView={{ view: target.view, s: target.s, z: target.z }}
+            width={paneW}
+            height={box.h}
+            clip={viewMode === 'split' ? `inset(0 0 0 ${Math.max(0, splitX)}px)` : 'none'}
+            area={area}
           />
         )}
         {facesOn &&
@@ -710,9 +747,11 @@ export function Viewer({
         />
       </div>
       <div className="absolute right-3 bottom-3 z-20 flex items-center gap-2">
-        {(busy || error || loadingModel) && (
+        {(busy || error || loadingModel || refining) && (
           <span
             role="status"
+            data-testid="preview-status"
+            title={refining ? t('preview.refiningHint') : undefined}
             className={`flex items-center gap-2 rounded-btn border px-2.5 py-1.5 text-[12px] backdrop-blur ${
               error
                 ? 'border-danger/60 bg-[rgba(14,14,16,.85)] text-[#F26D6D]'
@@ -726,7 +765,13 @@ export function Viewer({
               ? t('preview.error', { msg: error })
               : loadingModel
                 ? t('preview.loadingModel')
-                : t('preview.computing')}
+                : refining && live
+                  ? live.sess.state === 'paused'
+                    ? t('preview.refiningPaused', { pct })
+                    : live.sess.state === 'error'
+                      ? t('preview.refiningError', { msg: live.sess.error ?? '' })
+                      : t('preview.refining', { pct })
+                  : t('preview.computing')}
           </span>
         )}
         {img.faces.length > 0 && (

@@ -14,6 +14,7 @@ import ctypes
 import gc
 import logging
 import re
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -88,6 +89,9 @@ class Settings:
     keep_intermediates: bool = False
     #: (x, y, width, height) in source pixels: process only this region as a new image
     crop: tuple[int, int, int, int] | None = None
+    #: JPEG quality factor for the artefact model; None = estimate from the processed pixels.
+    #: Previews of parts of an image pass the estimate of the whole image (no seams).
+    jpeg_qf: float | None = None
 
 
 @dataclass
@@ -115,6 +119,11 @@ class Result:
 
 
 # ----------------------------------------------------------------------------- helpers
+def selected_faces_settings(fs: FaceSettings) -> FaceSettings:
+    """Face settings for a sub-image whose face list was already selected with ``fs``."""
+    return replace(fs, exclude=(), min_size=0.0, only_largest=False)
+
+
 def _model_kind(model_id: str) -> str:
     from pixforge.models import registry
 
@@ -232,6 +241,7 @@ class Pipeline:
         self.device = device
         self._factory = backend_factory or self._onnx_backend
         self._backends: dict[str, InferenceBackend] = {}
+        self._backend_lock = threading.RLock()
         self._detector = detector
         #: called with (model_id, loading) around model loads, e.g. to tell the UI
         self.on_model_load: Callable[[str, bool], None] | None = None
@@ -244,6 +254,10 @@ class Pipeline:
         return b
 
     def backend(self, model_id: str) -> InferenceBackend:
+        with self._backend_lock:  # previews, exports and background tiles run in parallel
+            return self._backend(model_id)
+
+    def _backend(self, model_id: str) -> InferenceBackend:
         if model_id not in self._backends:
             # One model per kind (upscale, denoise, face, ...) in VRAM: switching from "photo"
             # to "max-x4" frees "photo" first instead of stacking models until the card spills.
@@ -263,9 +277,10 @@ class Pipeline:
         return self._backends[model_id]
 
     def release(self, keep: set[str] | None = None) -> None:
-        for mid in list(self._backends):
-            if keep is None or mid not in keep:
-                self._backends.pop(mid).close()
+        with self._backend_lock:
+            for mid in list(self._backends):
+                if keep is None or mid not in keep:
+                    self._backends.pop(mid).close()
 
     @property
     def detector(self) -> FaceDetector:
@@ -501,14 +516,22 @@ class Pipeline:
         an_full = analysis or self.analyze(img, s, detect_faces=s.faces.enabled is not False)
         off = np.array([X0, Y0], np.float32)
         faces = []
-        for f in an_full.faces:  # faces centred inside the crop, in region coordinates
+        # select with the original indices (exclude refers to them), then re-index
+        for f in self._select_faces(an_full.faces, s.faces):  # centred inside the crop
             fx, fy = f.box[0] + f.box[2] / 2, f.box[1] + f.box[3] / 2
             if x <= fx < x + cw and y <= fy < y + ch:
                 box = (f.box[0] - X0, f.box[1] - Y0, f.box[2], f.box[3])
                 faces.append(Face(box, f.landmarks - off, f.score))
         sh, sw = sub_img.rgb.shape[:2]
         an = Analysis(an_full.noise, an_full.denoise, faces, sw, sh)
-        inner = replace(s, crop=None, scale=factor, target_width=None, target_height=None)
+        inner = replace(
+            s,
+            crop=None,
+            scale=factor,
+            target_width=None,
+            target_height=None,
+            faces=selected_faces_settings(s.faces),
+        )
         res = self.process(sub_img, inner, progress, cancel, an)
         L, T = round(ml * factor), round(mt * factor)
 
@@ -537,6 +560,10 @@ class Pipeline:
                 return float(suggest(an.noise, None, "clean").strength)
             return 50.0
         return an.denoise.strength
+
+    @staticmethod
+    def select_faces(faces: list[Face], fs: FaceSettings) -> list[Face]:
+        return Pipeline._select_faces(faces, fs)
 
     @staticmethod
     def _select_faces(faces: list[Face], fs: FaceSettings) -> list[Face]:
@@ -571,6 +598,22 @@ class Pipeline:
                 if msg not in warnings:
                     warnings.append(msg)
 
+    def estimate_jpeg_qf(self, rgb: np.ndarray) -> float | None:
+        """FBCNN's own quality estimate, averaged over four crops of the image."""
+        b = self.backend("jpeg")
+        h, w = rgb.shape[:2]
+        t = min(256, (min(h, w) // 8) * 8)
+        if t < 64 or not hasattr(b, "jpeg_qf"):
+            return None
+        qfs = []
+        for cy, cx in ((0.3, 0.3), (0.3, 0.7), (0.7, 0.3), (0.7, 0.7)):
+            y0 = int(np.clip(cy * h - t / 2, 0, h - t))
+            x0 = int(np.clip(cx * w - t / 2, 0, w - t))
+            b.jpeg_qf = -1.0
+            b.run_tile(np.ascontiguousarray(rgb[y0 : y0 + t, x0 : x0 + t]))
+            qfs.append(float(np.asarray(b.last_extra_outputs[0]).ravel()[0]))
+        return float(np.mean(qfs))
+
     def _jpeg(
         self,
         rgb: np.ndarray,
@@ -581,17 +624,9 @@ class Pipeline:
     ) -> np.ndarray:
         b = self.backend("jpeg")
         # One quality estimate for the whole image (per-tile estimates would cause seams).
-        h, w = rgb.shape[:2]
-        t = min(256, (min(h, w) // 8) * 8)
-        if t >= 64 and hasattr(b, "jpeg_qf"):
-            qfs = []
-            for cy, cx in ((0.3, 0.3), (0.3, 0.7), (0.7, 0.3), (0.7, 0.7)):
-                y0 = int(np.clip(cy * h - t / 2, 0, h - t))
-                x0 = int(np.clip(cx * w - t / 2, 0, w - t))
-                b.jpeg_qf = -1.0
-                b.run_tile(np.ascontiguousarray(rgb[y0 : y0 + t, x0 : x0 + t]))
-                qfs.append(float(np.asarray(b.last_extra_outputs[0]).ravel()[0]))
-            b.jpeg_qf = float(np.mean(qfs))
+        qf = s.jpeg_qf if s.jpeg_qf is not None else self.estimate_jpeg_qf(rgb)
+        if qf is not None and hasattr(b, "jpeg_qf"):
+            b.jpeg_qf = qf
         fixed = self._tiled(b, rgb, s, progress, cancel, warnings)
         a = float(np.clip(s.jpeg_strength / 100.0, 0, 1))
         return rgb * (1 - a) + fixed * a

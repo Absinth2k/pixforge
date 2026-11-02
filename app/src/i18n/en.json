@@ -40,7 +40,11 @@
     "divider": "Before/after divider",
     "error": "Preview failed: {{msg}}",
     "facesHint": "Click a frame to exclude that face",
-    "loadingModel": "Loading model …"
+    "loadingModel": "Loading model …",
+    "refining": "Computing the real result … {{pct}} %",
+    "refiningPaused": "Real result paused while exporting ({{pct}} %)",
+    "refiningError": "Real result failed: {{msg}}",
+    "refiningHint": "Until then the preview shows an approximation, or the original when zoomed out."
   },
   "panel": {
     "title": "Settings",

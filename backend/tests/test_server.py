@@ -85,7 +85,25 @@ def test_preview_returns_requested_size(client: TestClient, stage: str) -> None:
         assert im.size == (320, 240)
 
 
-def test_preview_at_fit_zoom_downsamples_the_source(client: TestClient) -> None:
+def test_zoomed_out_preview_downsamples_the_source(client: TestClient) -> None:
+    info = _add(client)
+    body = {
+        "image_id": info["id"],
+        "region": {"x": 0, "y": 0, "w": 160, "h": 120},
+        "out_w": 320,
+        "out_h": 240,
+        "settings": {"scale": 4, "denoise": {"mode": "off"}},
+    }
+    r = client.post("/api/preview", json=body, headers=H)
+    assert r.status_code == 200
+    assert r.headers["X-Preview-Kind"] == "approx"
+    photo = client.app.state.pipeline.backend("photo")  # type: ignore[attr-defined]
+    # output 320 px wide at 4x needs only 80 px of source, not 160
+    assert max(w for _, w in photo.inner.calls) <= 128  # 80 px in the 128 bucket, not 192
+
+
+def test_strongly_zoomed_out_preview_shows_the_original(client: TestClient) -> None:
+    """A model on a tiny copy invents structures; the background tiles bring the result."""
     info = _add(client)
     body = {
         "image_id": info["id"],
@@ -95,10 +113,70 @@ def test_preview_at_fit_zoom_downsamples_the_source(client: TestClient) -> None:
         "settings": {"scale": 4, "denoise": {"mode": "off"}},
     }
     r = client.post("/api/preview", json=body, headers=H)
-    assert r.status_code == 200
-    photo = client.app.state.pipeline.backend("photo")  # type: ignore[attr-defined]
-    # output 160 px wide at 4x needs only ~40 px of source (plus margin), not 160
-    assert max(w for _, w in photo.inner.calls) <= 96
+    assert r.status_code == 200 and r.headers["X-Preview-Kind"] == "original"
+    assert "photo" not in client.app.state.pipeline._backends  # type: ignore[attr-defined]
+
+
+def _wait_tiles(client: TestClient, body: dict, timeout: float = 30) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = client.post("/api/tiles", json=body, headers=H)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        if d["state"] in ("done", "error"):
+            return d
+        time.sleep(0.1)
+    raise AssertionError(f"tiles not done: {d}")
+
+
+def test_background_tiles_assemble_to_the_export_result(client: TestClient) -> None:
+    import io
+
+    info = _add(client)
+    client.app.state.tiles.tile_size = lambda: 64  # type: ignore[attr-defined]
+    settings = {"scale": 2, "denoise": {"mode": "off"}, "sharpen": 40}
+    body = {
+        "image_id": info["id"],
+        "settings": settings,
+        "focus": {"x": 100, "y": 0, "w": 60, "h": 60},
+    }
+    d = _wait_tiles(client, body)
+    assert d["state"] == "done", d
+    assert (d["cols"], d["rows"], d["total"], d["done_count"]) == (3, 2, 6, 6)
+    full = np.zeros((240, 320, 3), np.float32)
+    for i, j in d["done"]:
+        r = client.get(f"/api/tiles/{d['id']}/{i}/{j}/0", headers=H)
+        assert r.status_code == 200
+        with Image.open(io.BytesIO(r.content)) as im:
+            a = np.asarray(im.convert("RGB"), np.float32) / 255
+        y, x = j * 128, i * 128
+        full[y : y + a.shape[0], x : x + a.shape[1]] = a
+        # reduced pyramid levels exist and halve the size
+        r1 = client.get(f"/api/tiles/{d['id']}/{i}/{j}/1", headers=H)
+        with Image.open(io.BytesIO(r1.content)) as im1:
+            assert abs(im1.size[0] - a.shape[1] / 2) <= 1
+    # same pixels as processing the whole image (tile context = export crop margin)
+    pipe = client.app.state.pipeline  # type: ignore[attr-defined]
+    img, an = client.app.state.store.image(info["id"])  # type: ignore[attr-defined]
+    from pixforge.server.app import SettingsIn
+
+    ref = pipe.process(img, SettingsIn(**settings).to_settings(), analysis=an).image.rgb
+    assert np.abs(full - ref).mean() < 0.01  # JPEG tiles
+    # the same settings reuse the finished session
+    again = client.post("/api/tiles", json=body, headers=H).json()
+    assert again["id"] == d["id"] and again["state"] == "done"
+
+
+def test_tiles_only_inside_the_crop(client: TestClient) -> None:
+    info = _add(client)
+    client.app.state.tiles.tile_size = lambda: 64  # type: ignore[attr-defined]
+    body = {
+        "image_id": info["id"],
+        "settings": {"scale": 2, "denoise": {"mode": "off"}, "crop": [40, 10, 40, 40]},
+    }
+    d = _wait_tiles(client, body)
+    assert d["total"] == 2 and sorted(map(tuple, d["done"])) == [(0, 0), (1, 0)]
+    assert client.get(f"/api/tiles/{d['id']}/2/1/0", headers=H).status_code == 404
 
 
 def test_estimate(client: TestClient) -> None:
