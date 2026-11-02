@@ -112,7 +112,7 @@ export function AboutDialog() {
               <button
                 type="button"
                 onClick={() => void window.pixforge.update.install()}
-                className="h-8 rounded-btn bg-accent px-3 text-[12.5px] font-semibold text-on-accent hover:bg-accent-hover"
+                className="h-8 shrink-0 rounded-btn bg-accent px-3 text-[12.5px] font-semibold whitespace-nowrap text-on-accent hover:bg-accent-hover"
               >
                 {t('about.restart')}
               </button>
@@ -123,7 +123,7 @@ export function AboutDialog() {
                   type="button"
                   disabled={u.phase === 'checking' || u.phase === 'downloading'}
                   onClick={() => void window.pixforge.update.check()}
-                  className="h-8 rounded-btn border border-line px-3 text-[12.5px] text-text2 hover:bg-hover disabled:opacity-50"
+                  className="h-8 shrink-0 rounded-btn border border-line px-3 text-[12.5px] whitespace-nowrap text-text2 hover:bg-hover disabled:opacity-50"
                 >
                   {t('about.check')}
                 </button>

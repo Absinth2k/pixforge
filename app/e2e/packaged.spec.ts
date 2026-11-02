@@ -81,7 +81,8 @@ test('packaged app: setup, about, preview', async () => {
       }
     })
   })
-  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
+  // first start of a fresh install: the antivirus may hold the app for half a minute
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 180_000 })
   try {
     const ctx = browser.contexts()[0]
     const page = ctx.pages()[0] ?? (await ctx.waitForEvent('page'))
@@ -100,9 +101,15 @@ test('packaged app: setup, about, preview', async () => {
     if (process.env['PIXFORGE_CHECK_UPDATE']) {
       // the installed version must find itself as the newest release on GitHub
       await page.getByRole('button', { name: /Jetzt prüfen|Check now/ }).click()
-      await expect(page.getByText(/Pixforge ist aktuell|Pixforge is up to date/)).toBeVisible({
-        timeout: 60_000
-      })
+      // PIXFORGE_EXPECT_UPDATE=<version>: an older build must find and download that version
+      const upd = process.env['PIXFORGE_EXPECT_UPDATE']
+      const v = upd?.replaceAll('.', '\\.')
+      await expect(
+        upd
+          ? page.getByText(new RegExp(`${v} ist bereit|${v} is ready`))
+          : page.getByText(/Pixforge ist aktuell|Pixforge is up to date/)
+      ).toBeVisible({ timeout: 300_000 })
+      if (upd) await page.screenshot({ path: 'test-results/packaged-update.png' })
     }
     await page.screenshot({ path: 'test-results/packaged-about.png' })
     await page.keyboard.press('Escape')
