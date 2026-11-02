@@ -132,5 +132,38 @@
     "aspect": "Seitenverhältnis",
     "label": "Ausschnitt {{w}} × {{h}} px → {{ow}} × {{oh}} px",
     "card": "Nur der Ausschnitt {{w}} × {{h}} px wird gerechnet und als neues Bild gespeichert (…_ausschnitt)."
+  },
+  "models": {
+    "setupTitle": "Pixforge wird eingerichtet",
+    "setupText": "Einmalig werden die KI-Modelle für dieses Gerät heruntergeladen ({{size}}). Danach arbeitet Pixforge ohne Internet.",
+    "setupError": "Der Download hat nicht geklappt.",
+    "retry": "Erneut versuchen",
+    "missingTitle": "Modell fehlt noch",
+    "missingText": "Für diese Einstellung wird {{names}} gebraucht ({{size}}, einmaliger Download).",
+    "download": "Herunterladen",
+    "downloading": "Wird geladen … {{pct}} %",
+    "tileDownload": "Download {{size}}"
+  },
+  "about": {
+    "open": "Über Pixforge",
+    "close": "Schließen",
+    "version": "Version {{version}}",
+    "text": "Vergrößert und entrauscht Fotos mit KI, komplett auf diesem Computer.",
+    "autoUpdate": "Automatisch aktualisieren",
+    "check": "Jetzt prüfen",
+    "dev": "Entwicklungsversion: keine Updates",
+    "off": "Ausgeschaltet",
+    "checking": "Suche nach Updates …",
+    "upToDate": "Pixforge ist aktuell.",
+    "downloading": "Version {{version}} wird geladen … {{pct}} %",
+    "ready": "Version {{version}} ist bereit und wird beim Beenden installiert.",
+    "readyShort": "Update {{version}} bereit · Neu starten",
+    "restart": "Jetzt neu starten",
+    "error": "Update-Prüfung fehlgeschlagen: {{msg}}",
+    "device": "Rechnet auf",
+    "privacy": "Datenschutz",
+    "privacyText": "Bilder verlassen den Computer nie. Keine Telemetrie; Internet nur für Modell-Downloads und Updates.",
+    "source": "Quellcode",
+    "licenses": "Lizenzen"
   }
 }

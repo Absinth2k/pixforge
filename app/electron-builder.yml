@@ -1,0 +1,48 @@
+# Windows installer (NSIS). Build: npm run dist  (backend first: npm run dist:backend)
+appId: de.andrestrahl.pixforge
+productName: Pixforge
+copyright: Copyright © 2026 Andre Strahl
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+asar: true
+extraResources:
+  # the frozen Python backend (PyInstaller, backend/packaging/pixforge-server.spec)
+  - from: ../backend/dist/pixforge-server
+    to: backend
+  - from: ../LICENSE
+    to: LICENSE.txt
+  - from: ../NOTICE
+    to: NOTICE.txt
+  - from: ../THIRD_PARTY.md
+    to: THIRD_PARTY.md
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  executableName: Pixforge
+nsis:
+  # assisted installer: "only for me" (no admin) or "for all users", folder can be changed
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Pixforge
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  multiLanguageInstaller: true
+  installerLanguages: [de_DE, en_US]
+  artifactName: Pixforge-Setup-${version}.${ext}
+  # models (%LOCALAPPDATA%\Pixforge) and settings stay when uninstalling
+  deleteAppDataOnUninstall: false
+publish:
+  provider: github
+  owner: Absinth2k
+  repo: pixforge
+  releaseType: release

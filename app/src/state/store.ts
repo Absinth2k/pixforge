@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { Api } from '@/api/client'
 import {
   defaultSettings,
+  type DownloadState,
   type Health,
   type ImageInfo,
   type Job,
@@ -12,6 +13,7 @@ import {
 } from '@/api/types'
 import i18n from '@/i18n'
 import { applyTheme, type ThemeName } from '@/theme/theme'
+import type { UpdateState } from '../../electron/api'
 
 export type ViewMode = 'single' | 'split' | 'side'
 
@@ -48,6 +50,13 @@ interface State {
   backendLog: string | null
   health: Health | null
   models: ModelInfo[]
+  /** download progress per model id (WebSocket "download" events) */
+  downloads: Record<string, DownloadState>
+  /** increases whenever a model was installed: previews retry */
+  modelsRev: number
+  aboutOpen: boolean
+  update: UpdateState | null
+  downloadModels(ids: string[]): Promise<void>
   images: ImageInfo[]
   selectedId: string | null
   settings: Record<string, Settings>
@@ -89,12 +98,36 @@ function storedTheme(): ThemeName {
   }
 }
 
+/** Reload model list and health after a download (debounced: several files finish together). */
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+function refreshModels(): Promise<void> {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  return new Promise((resolve) => {
+    refreshTimer = setTimeout(async () => {
+      const { api } = useStore.getState()
+      if (api) {
+        try {
+          const [health, models] = await Promise.all([api.health(), api.models()])
+          useStore.setState((st) => ({ health, models, modelsRev: st.modelsRev + 1 }))
+        } catch {
+          /* the next event retries */
+        }
+      }
+      resolve()
+    }, 300)
+  })
+}
+
 export const useStore = create<State>((set, get) => ({
   api: null,
   backendError: null,
   backendLog: null,
   health: null,
   models: [],
+  downloads: {},
+  modelsRev: 0,
+  aboutOpen: false,
+  update: null,
   images: [],
   selectedId: null,
   settings: {},
@@ -130,6 +163,8 @@ export const useStore = create<State>((set, get) => ({
     const byId: Record<string, Job> = {}
     for (const j of jobs.jobs) byId[j.id] = j
     set({ health, models, jobs: byId, queuePaused: jobs.paused })
+    // First start: the models this device needs are fetched right away (setup screen).
+    if (health.missing_defaults.length) void get().downloadModels(health.missing_defaults)
     // After a restart of the backend it knows none of the open images: register them again
     // and carry settings, view and selection over to their new ids.
     const open = get().images
@@ -174,6 +209,10 @@ export const useStore = create<State>((set, get) => ({
         }
       } else if (ev.type === 'model') {
         set({ loadingModel: ev.loading ? String(ev.id) : null })
+      } else if (ev.type === 'download') {
+        const d = ev as unknown as DownloadState
+        set((s) => ({ downloads: { ...s.downloads, [d.id]: d } }))
+        if (d.state === 'done') void refreshModels()
       } else if (ev.type === 'tile' || ev.type === 'tiles') {
         tileBus.dispatchEvent(new CustomEvent('tile', { detail: ev }))
       } else if (ev.type === 'queue' && typeof ev.paused === 'boolean') {
@@ -257,6 +296,16 @@ export const useStore = create<State>((set, get) => ({
 
   set(partial) {
     set(partial)
+  },
+
+  async downloadModels(ids) {
+    const api = get().api
+    if (!api || !ids.length) return
+    try {
+      await api.downloadModels(ids)
+    } catch (e) {
+      set({ toast: { text: connectionMessage(e), kind: 'error' } })
+    }
   },
 
   async exportImages(ids) {

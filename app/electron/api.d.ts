@@ -8,6 +8,16 @@ export interface BackendInfo {
   log?: string
 }
 
+export interface UpdateState {
+  phase: 'idle' | 'dev' | 'disabled' | 'checking' | 'none' | 'downloading' | 'ready' | 'error'
+  enabled: boolean
+  /** version of the running app */
+  current: string
+  version?: string
+  percent?: number
+  error?: string
+}
+
 export interface PixforgeBridge {
   platform: string
   versions: { app: string; electron: string; chrome: string }
@@ -30,6 +40,15 @@ export interface PixforgeBridge {
   onOpenFiles(cb: (paths: string[]) => void): () => void
   /** Files passed on the command line ("Open with"), handed out once. */
   takePendingFiles(): Promise<string[]>
+  /** Opens an https:// link in the default browser. */
+  openExternal(url: string): void
+  update: {
+    get(): Promise<UpdateState>
+    setEnabled(on: boolean): Promise<UpdateState>
+    check(): Promise<UpdateState>
+    install(): Promise<void>
+    onState(cb: (s: UpdateState) => void): () => void
+  }
 }
 
 declare global {

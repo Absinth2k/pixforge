@@ -9,6 +9,7 @@ export function StatusBar() {
   const api = useStore((s) => s.api)
   const health = useStore((s) => s.health)
   const jobs = useStore((s) => s.jobs)
+  const update = useStore((s) => s.update)
   const toast = useStore((s) => s.toast)
   const set = useStore((s) => s.set)
 
@@ -79,6 +80,15 @@ export function StatusBar() {
             />
           </span>
         </>
+      )}
+      {update?.phase === 'ready' && (
+        <button
+          type="button"
+          onClick={() => void window.pixforge.update.install()}
+          className="rounded-btn border border-accent-line bg-accent-soft px-2 py-0.5 text-[11.5px] text-text"
+        >
+          {t('about.readyShort', { version: update.version })}
+        </button>
       )}
       <span className="border-l border-line pl-3.5">{t('app.copyright')}</span>
     </div>

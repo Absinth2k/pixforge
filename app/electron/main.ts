@@ -139,6 +139,9 @@ function registerIpc(): void {
     return files
   })
   ipcMain.on('shell:show-item', (_e, path: string) => shell.showItemInFolder(path))
+  ipcMain.on('shell:open-external', (_e, url: string) => {
+    if (typeof url === 'string' && url.startsWith('https://')) void shell.openExternal(url)
+  })
   ipcMain.on('shell:open-logs', () => {
     void shell.openPath(join(app.getPath('home'), 'AppData', 'Local', 'Pixforge', 'logs'))
   })
@@ -161,7 +164,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
   app.whenReady().then(() => {
-    app.setAppUserModelId('de.strahl.pixforge')
+    app.setAppUserModelId('de.andrestrahl.pixforge')
     pendingFiles = filesFromArgv(process.argv)
     installCsp()
     registerIpc()

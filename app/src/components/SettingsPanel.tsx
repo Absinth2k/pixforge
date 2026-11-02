@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { Check, Crop, Eye, EyeOff, MoveRight, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Estimate, ImageInfo, Settings } from '@/api/types'
+import { requiredModels } from '@/api/types'
 import { useStore } from '@/state/store'
+import { formatBytes } from './ModelSetup'
+import { outputFactor } from './Viewer'
 import { formatDuration, Note, nf, Section, Segmented, Slider, Switch } from './ui'
 
 interface ModelChoice {
@@ -10,7 +13,6 @@ interface ModelChoice {
   id: (factor: number) => string
   name: { de: string; en: string }
   desc: { de: string; en: string }
-  meta: string
 }
 
 const MODELS: ModelChoice[] = [
@@ -21,8 +23,7 @@ const MODELS: ModelChoice[] = [
     desc: {
       de: 'Echte Fotos, auch verrauscht oder komprimiert',
       en: 'Real photos, also noisy or compressed'
-    },
-    meta: 'Standard · 4×'
+    }
   },
   {
     family: 'photo-sharp',
@@ -31,8 +32,7 @@ const MODELS: ModelChoice[] = [
     desc: {
       de: 'Knackiger, für Landschaft und Architektur',
       en: 'Crisper, for landscape and architecture'
-    },
-    meta: '4×'
+    }
   },
   {
     family: 'clean',
@@ -41,8 +41,7 @@ const MODELS: ModelChoice[] = [
     desc: {
       de: 'Screenshots, Renderings, Zeichnungen. Nicht für Kamerafotos',
       en: 'Screenshots, renderings, drawings. Not for camera photos'
-    },
-    meta: '2× · 3× · 4×'
+    }
   },
   {
     family: 'max',
@@ -51,8 +50,7 @@ const MODELS: ModelChoice[] = [
     desc: {
       de: 'Größeres Grafik-Modell, lädt länger. Nicht für Kamerafotos',
       en: 'Larger graphics model, loads longer. Not for camera photos'
-    },
-    meta: '2× · 4×'
+    }
   }
 ]
 
@@ -190,7 +188,20 @@ export function SettingsPanel({ img }: { img: ImageInfo }) {
                   )}
                 </span>
                 <span className="text-[11.5px] leading-[1.35] text-text3">{m.desc[lang]}</span>
-                <span className="text-[11px] text-text3">{m.meta}</span>
+                {(() => {
+                  // not downloaded yet for this device: say how big the download is
+                  const [id] = requiredModels(
+                    { ...settings, task: 'upscale', model: m.id(settings.scale) },
+                    outputFactor(img, { ...settings, task: 'upscale' }),
+                    false
+                  )
+                  const need = models.find((x) => x.id === id)?.needed
+                  return need ? (
+                    <span className="text-[11px] text-accent-ink">
+                      {t('models.tileDownload', { size: formatBytes(need.size, lang) })}
+                    </span>
+                  ) : null
+                })()}
               </button>
             )
           })}

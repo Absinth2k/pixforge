@@ -132,5 +132,38 @@
     "aspect": "Aspect ratio",
     "label": "Crop {{w}} × {{h}} px → {{ow}} × {{oh}} px",
     "card": "Only the {{w}} × {{h}} px crop is processed and saved as a new image (…_crop)."
+  },
+  "models": {
+    "setupTitle": "Setting up Pixforge",
+    "setupText": "The AI models for this device are downloaded once ({{size}}). After that Pixforge works offline.",
+    "setupError": "The download did not work.",
+    "retry": "Try again",
+    "missingTitle": "Model not downloaded yet",
+    "missingText": "These settings need {{names}} ({{size}}, one-time download).",
+    "download": "Download",
+    "downloading": "Downloading … {{pct}} %",
+    "tileDownload": "Download {{size}}"
+  },
+  "about": {
+    "open": "About Pixforge",
+    "close": "Close",
+    "version": "Version {{version}}",
+    "text": "Upscales and denoises photos with AI, entirely on this computer.",
+    "autoUpdate": "Update automatically",
+    "check": "Check now",
+    "dev": "Development build: no updates",
+    "off": "Switched off",
+    "checking": "Checking for updates …",
+    "upToDate": "Pixforge is up to date.",
+    "downloading": "Downloading version {{version}} … {{pct}} %",
+    "ready": "Version {{version}} is ready and will be installed when you quit.",
+    "readyShort": "Update {{version}} ready · Restart",
+    "restart": "Restart now",
+    "error": "Update check failed: {{msg}}",
+    "device": "Runs on",
+    "privacy": "Privacy",
+    "privacyText": "Images never leave this computer. No telemetry; internet only for model downloads and updates.",
+    "source": "Source code",
+    "licenses": "Licences"
   }
 }

@@ -104,6 +104,11 @@ export class Api {
     return `${this.base}/api/tiles/${sid}/${i}/${j}/${level}?${q}`
   }
 
+  downloadModels = (ids: string[]): Promise<unknown> =>
+    this.req('POST', '/api/models/download', { ids })
+  cancelDownload = (id: string): Promise<unknown> =>
+    this.req('POST', `/api/models/${encodeURIComponent(id)}/cancel`)
+
   thumbUrl(id: string): string {
     return `${this.base}/api/images/${id}/thumb?t=${encodeURIComponent(this.token)}`
   }

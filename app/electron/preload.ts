@@ -10,7 +10,7 @@ function subscribe<T>(channel: string, cb: (value: T) => void): () => void {
 const bridge: PixforgeBridge = {
   platform: process.platform,
   versions: {
-    app: process.env['npm_package_version'] ?? '0.1.0',
+    app: process.env['npm_package_version'] ?? '',
     electron: process.versions.electron,
     chrome: process.versions.chrome
   },
@@ -31,7 +31,15 @@ const bridge: PixforgeBridge = {
   showInFolder: (path) => ipcRenderer.send('shell:show-item', path),
   openLogs: () => ipcRenderer.send('shell:open-logs'),
   onOpenFiles: (cb) => subscribe('app:open-files', cb),
-  takePendingFiles: () => ipcRenderer.invoke('app:take-pending-files')
+  takePendingFiles: () => ipcRenderer.invoke('app:take-pending-files'),
+  openExternal: (url) => ipcRenderer.send('shell:open-external', url),
+  update: {
+    get: () => ipcRenderer.invoke('update:get'),
+    setEnabled: (on) => ipcRenderer.invoke('update:set-enabled', on),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onState: (cb) => subscribe('update:state', cb)
+  }
 }
 
 contextBridge.exposeInMainWorld('pixforge', bridge)

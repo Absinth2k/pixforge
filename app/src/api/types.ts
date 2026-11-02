@@ -143,6 +143,33 @@ export interface ModelInfo {
   default: boolean
   installed: string[]
   size: Record<string, number>
+  /** what this device still has to download, null when the model is ready */
+  needed: { precision: string; size: number } | null
+  download: DownloadState | null
+}
+
+export interface DownloadState {
+  id: string
+  precision: string
+  total: number
+  done: number
+  state: 'queued' | 'running' | 'done' | 'error' | 'cancelled'
+  error: string | null
+}
+
+/** Models (ids) that processing with these settings needs, like the backend resolves them. */
+export function requiredModels(s: Settings, factor: number, hasFaces: boolean): string[] {
+  const out: string[] = []
+  if (s.task !== 'denoise') {
+    const fam = s.model.replace(/-x\d$/, '')
+    if (fam === 'clean') out.push(factor <= 2 ? 'clean-x2' : factor <= 3 ? 'clean-x3' : 'clean-x4')
+    else if (fam === 'max') out.push(factor <= 2 ? 'max-x2' : 'max-x4')
+    else out.push(s.model)
+  }
+  if (s.denoise.mode !== 'off') out.push(s.denoise.model)
+  if (wireSettings(s).jpeg_strength > 0) out.push('jpeg')
+  if (hasFaces && s.faces.enabled !== false) out.push(s.faces.model, 'face-detect')
+  return out
 }
 
 export interface Estimate {
@@ -185,7 +212,7 @@ export interface Region {
 export const defaultSettings = (): Settings => ({
   task: 'upscale',
   model: 'photo',
-  scale: 4,
+  scale: 2,
   target_width: null,
   target_height: null,
   denoise: { mode: 'auto', strength: null, model: 'denoise', detail_protect: 60 },

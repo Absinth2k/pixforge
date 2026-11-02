@@ -43,7 +43,9 @@ from pixforge.core.pipeline import (
 from pixforge.core.tiling import Cancelled
 from pixforge.denoise.models import suggest
 from pixforge.models import registry
+from pixforge.models.download import needed as dl_needed
 from pixforge.server import preview as pv
+from pixforge.server.downloads import Downloads, missing_defaults
 from pixforge.server.gate import Gate, GatedBackend
 from pixforge.server.jobs import ExportTarget, JobQueue
 from pixforge.server.tiles import POST_MARGIN, Post, TileRenderer
@@ -127,6 +129,10 @@ class TilesIn(BaseModel):
     stage: Literal["denoised", "result"] = "result"
     #: visible region (source px): these tiles are computed first
     focus: RegionIn | None = None
+
+
+class DownloadIn(BaseModel):
+    ids: list[str]
 
 
 class AddImagesIn(BaseModel):
@@ -331,6 +337,37 @@ def create_app(
     tiles = TileRenderer(pipeline, store.image, gate, events.publish, tile_size, with_qf)
     store.on_remove = tiles.drop_image
 
+    _device: list[Any] = []
+
+    def chosen_device() -> Any:
+        """The device the models run on (queried once, it does not change at runtime)."""
+        if not _device:
+            from pixforge.backends.onnx_backend import list_devices
+
+            devs = list_devices()
+            _device.append(
+                (
+                    devs,
+                    devs[0]
+                    if device == "auto"
+                    else next(
+                        (
+                            d
+                            for d in devs
+                            if (d.kind == "cpu" and device == "cpu")
+                            or (d.kind == "gpu" and device == f"gpu:{d.device_index}")
+                        ),
+                        devs[0],
+                    ),
+                )
+            )
+        return _device[0]
+
+    def device_kind() -> str:
+        return "gpu" if chosen_device()[1].kind == "gpu" else "cpu"
+
+    downloads = Downloads(events.publish, device_kind)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
         events.loop = asyncio.get_running_loop()
@@ -352,6 +389,7 @@ def create_app(
         events,
     )
     app.state.tiles = tiles
+    app.state.downloads = downloads
 
     def auth(request: Request) -> None:
         got = request.headers.get("x-pixforge-token") or request.query_params.get("t")
@@ -362,27 +400,8 @@ def create_app(
 
     @app.get("/api/health", dependencies=dep)
     def health() -> dict[str, Any]:
-        from pixforge.backends.onnx_backend import list_devices
-
-        devs = list_devices()
-        chosen = (
-            devs[0]
-            if device == "auto"
-            else next(
-                (
-                    d
-                    for d in devs
-                    if (d.kind == "cpu" and device == "cpu")
-                    or (d.kind == "gpu" and device == f"gpu:{d.device_index}")
-                ),
-                devs[0],
-            )
-        )
-        missing = [
-            m.id
-            for m in registry.all_models()
-            if m.default and not registry.installed_precisions(m.id)
-        ]
+        devs, chosen = chosen_device()
+        missing = missing_defaults(device_kind())
         return {
             "version": __version__,
             "device": chosen.__dict__,
@@ -406,9 +425,29 @@ def create_app(
                     "default": m.default,
                     "installed": registry.installed_precisions(m.id),
                     "size": {p: f.size for p, f in m.files.items()},
+                    # what this device still needs: {"precision", "size"} or None
+                    "needed": (
+                        {"precision": need[0], "size": need[1]}
+                        if (need := dl_needed(m.id, device_kind()))
+                        else None
+                    ),
+                    "download": downloads.state(m.id),
                 }
             )
         return out
+
+    @app.post("/api/models/download", dependencies=dep)
+    def download_models(body: DownloadIn) -> dict[str, Any]:
+        """Download models for this device (from the GitHub release), in the background."""
+        unknown = [i for i in body.ids if i not in {m.id for m in registry.all_models()}]
+        if unknown:
+            raise HTTPException(404, f"Unbekannte Modelle: {', '.join(unknown)}")
+        return {"downloads": downloads.request(body.ids)}
+
+    @app.post("/api/models/{model_id}/cancel", dependencies=dep)
+    def cancel_download(model_id: str) -> dict[str, bool]:
+        downloads.cancel(model_id)
+        return {"ok": True}
 
     @app.post("/api/images", dependencies=dep)
     async def add_images(body: AddImagesIn) -> dict[str, Any]:

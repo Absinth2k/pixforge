@@ -85,8 +85,8 @@ test('start screen, load an image, preview renders', async () => {
     await expect(fine).toHaveAttribute('aria-pressed', 'false')
     await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 5_000 })
     await fine.click()
-    // the estimate shows the 4x output size
-    await expect(page.getByText('1.920 × 1.280')).toBeVisible()
+    // new images start at 2x: the estimate shows the 2x output size
+    await expect(page.getByText('960 × 640').first()).toBeVisible()
     // denoise-only switches the task and the output size
     await page.getByRole('button', { name: /Nur entrauschen|Denoise only/ }).click()
     await expect(page.getByText('480 × 320').last()).toBeVisible()
@@ -117,12 +117,12 @@ test('smooth wheel zoom and crop tool', async () => {
 
     await page.keyboard.press('c')
     await expect(page.getByRole('button', { name: 'Fertig' })).toBeVisible()
-    await expect(page.getByText('Ausschnitt 336 × 224 px → 1.344 × 896 px').first()).toBeVisible()
+    await expect(page.getByText('Ausschnitt 336 × 224 px → 672 × 448 px').first()).toBeVisible()
     await page.getByRole('button', { name: 'Fertig' }).click()
     await expect(page.getByText(/Nur der Ausschnitt 336 × 224 px wird gerechnet/)).toBeVisible()
-    await expect(page.getByText('1.344 × 896')).toBeVisible() // estimate uses the crop
+    await expect(page.getByText('672 × 448')).toBeVisible() // estimate uses the crop
     await page.getByRole('button', { name: 'Aufheben' }).click()
-    await expect(page.getByText('1.920 × 1.280')).toBeVisible()
+    await expect(page.getByText('960 × 640').first()).toBeVisible()
   } finally {
     await app.close()
   }
@@ -140,7 +140,7 @@ test('screenshots for the README', async () => {
     await page.screenshot({ path: join(outDir, 'start.png') })
     await openFiles(app, [shot!])
     await expect(page.locator('img[alt^="Pixforge"]')).toBeVisible()
-    await expect(page.getByText(/Vorschau wird berechnet/)).toBeHidden({ timeout: 90_000 })
+    await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 90_000 })
     await page.waitForTimeout(600)
     await page.screenshot({ path: join(outDir, 'main.png') })
     await page.getByRole('button', { name: 'Hell/Dunkel umschalten' }).click()
@@ -148,15 +148,15 @@ test('screenshots for the README', async () => {
     await page.screenshot({ path: join(outDir, 'main-light.png') })
     await page.getByRole('button', { name: 'Hell/Dunkel umschalten' }).click()
     await page.keyboard.press('1')
-    // the preview request is debounced: wait until it started, then until it finished
-    await expect(page.getByText(/Vorschau wird berechnet/)).toBeVisible({ timeout: 5_000 })
-    await expect(page.getByText(/Vorschau wird berechnet/)).toBeHidden({ timeout: 90_000 })
+    // tiles of the real result (or the quick preview) for the new view
+    await page.waitForTimeout(800)
+    await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 90_000 })
     await page.waitForTimeout(400)
     await page.screenshot({ path: join(outDir, 'main-100.png') })
     await page.keyboard.press('0')
     await page.keyboard.press('c')
     await page.getByRole('button', { name: '3:2' }).click()
-    await expect(page.getByText(/Vorschau wird berechnet/)).toBeHidden({ timeout: 90_000 })
+    await expect(page.getByTestId('preview-status')).toBeHidden({ timeout: 90_000 })
     await page.waitForTimeout(700)
     await page.screenshot({ path: join(outDir, 'crop.png') })
   } finally {

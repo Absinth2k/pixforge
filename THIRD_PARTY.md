@@ -12,7 +12,7 @@ Each release asset comes with the original license text.
 | ID | Used for | Source | License |
 |---|---|---|---|
 | `photo`, `photo-sharp` | „Fotos (Standard)“, „Fotos, schärfer“ (Real_HAT_GAN_SRx4 / _sharper) | [XPixelGroup/HAT](https://github.com/XPixelGroup/HAT) | Apache-2.0 |
-| `clean-x2/x3/x4`, `max-x2/x4` | „Saubere Bilder“, „Maximale Qualität“ (HAT / HAT-L, ImageNet-pretrain) | XPixelGroup/HAT | Apache-2.0 |
+| `clean-x2/x3/x4`, `max-x2/x4` | „Grafiken“, „Grafiken, groß“ (HAT / HAT-L, ImageNet-pretrain) | XPixelGroup/HAT | Apache-2.0 |
 | `denoise`, `denoise-gan` | noise reduction (SCUNet color real PSNR / GAN) | [cszn/SCUNet](https://github.com/cszn/SCUNet) | Apache-2.0 |
 | `jpeg` | JPEG artifact removal (FBCNN color) | [jiaxi-jiang/FBCNN](https://github.com/jiaxi-jiang/FBCNN) | Apache-2.0 |
 | `face` | face restoration, default (RestoreFormer++) | [wzhouxiff/RestoreFormerPlusPlus](https://github.com/wzhouxiff/RestoreFormerPlusPlus) | Apache-2.0 |
@@ -39,10 +39,15 @@ changes made. HAT and SCUNet contain parts derived from SwinIR (Apache-2.0) and 
 | pi-heif | HEIC/HEIF decoding (decode-only build, no x265) | BSD-3-Clause; bundles **libheif** and **libde265** under **LGPL-3.0** as separate, replaceable DLLs |
 | tifffile | 16-bit TIFF writing | BSD-3-Clause |
 | imagecodecs | LZW/ZIP compression for TIFF | BSD-3-Clause (bundled codec libraries under permissive licenses) |
-| rawpy (optional `raw` extra) | camera RAW decoding | MIT; bundles **LibRaw** under **LGPL-2.1 or CDDL-1.0** as a separate DLL |
+| rawpy | camera RAW decoding | MIT; bundles **LibRaw** under **LGPL-2.1 or CDDL-1.0** as a separate DLL |
 
 | fastapi, starlette, pydantic | local HTTP API for the app | MIT / BSD-3-Clause / MIT |
 | uvicorn, websockets | HTTP/WebSocket server | BSD-3-Clause |
+| Python 3.12 runtime | interpreter of the frozen backend | PSF License |
+| PyInstaller bootloader | starts the frozen backend (`pixforge-server.exe`) | GPL-2.0 **with the bootloader exception**, which explicitly allows distributing frozen programs under any license |
+
+The models themselves are not part of the installer: the app downloads them on first start
+from the GitHub release `models-v1` (see the table above; GFPGAN is not distributed).
 
 ## Desktop app (shipped)
 
@@ -54,9 +59,11 @@ changes made. HAT and SCUNet contain parts derived from SwinIR (Apache-2.0) and 
 | i18next, react-i18next | German / English texts | MIT |
 | lucide-react | icons | ISC |
 | Inter (@fontsource-variable/inter) | typeface | SIL Open Font License 1.1 |
+| electron-updater | automatic updates from GitHub Releases | MIT |
+| NSIS (installer stub, via electron-builder) | Windows installer | zlib/libpng |
 
 Build tools for the app (not shipped): electron-vite, Vite, Tailwind CSS, TypeScript, ESLint,
-Prettier, Playwright (MIT / Apache-2.0).
+Prettier, Playwright, electron-builder, PyInstaller (MIT / Apache-2.0 / GPL-2.0 with exception).
 
 LGPL components are dynamically linked and shipped as separate files; they can be replaced by
 the user, and their license texts are included in the installer.

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '@/state/store'
 import { Logo, nf } from './ui'
@@ -28,6 +29,16 @@ export function TitleBar() {
           : ''}
       </span>
       <div className="flex h-9">
+        <button
+          type="button"
+          className={btn}
+          aria-label={t('about.open')}
+          title={t('about.open')}
+          data-testid="about-button"
+          onClick={() => useStore.setState({ aboutOpen: true })}
+        >
+          <Info size={15} strokeWidth={1.8} aria-hidden="true" />
+        </button>
         <button
           type="button"
           className={btn}

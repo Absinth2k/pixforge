@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react'
-import { RotateCw, ScanFace } from 'lucide-react'
+import { Download, RotateCw, ScanFace } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/api/client'
 import type { ImageInfo, Region, Settings, Stage, TileSession } from '@/api/types'
-import { modelSettingsKey, postOf } from '@/api/types'
+import { modelSettingsKey, postOf, requiredModels } from '@/api/types'
 import { tileBus, useStore } from '@/state/store'
 import { applyAspect, clampRect, CropOverlay } from './CropOverlay'
+import { downloadProgress, formatBytes } from './ModelSetup'
 import { TileCanvas, tileKey, tilesIn } from './TileCanvas'
 import { nf, Segmented } from './ui'
 
@@ -165,6 +166,10 @@ export function Viewer({
   const updateSettings = useStore((s) => s.updateSettings)
   const cropEditing = useStore((s) => s.cropEditing)
   const loadingModel = useStore((s) => s.loadingModel)
+  const models = useStore((s) => s.models)
+  const downloads = useStore((s) => s.downloads)
+  const modelsRev = useStore((s) => s.modelsRev)
+  const downloadModels = useStore((s) => s.downloadModels)
   const [aspectKey, setAspectKey] = useState('free')
   const [portrait, setPortrait] = useState(false)
 
@@ -298,6 +303,21 @@ export function Viewer({
   // are enough (a 1.5x HiDPI screen would otherwise cost 2.25x the GPU time).
   const [ow, oh] = region ? outSize(region, target.s, MAX_OUT, target.z >= 1) : [1, 1]
 
+  // Models these settings need that are not downloaded yet: no preview requests until they are.
+  const missing = settings
+    ? requiredModels(settings, factor, img.faces.length > 0).filter(
+        (id) => models.find((m) => m.id === id)?.needed
+      )
+    : []
+  const missingKey = missing.join(',')
+  const missingDl = downloadProgress(missing, models, downloads)
+  const missingNames = missing
+    .map((id) => {
+      const m = models.find((x) => x.id === id)
+      return `„${m ? m.name[i18n.language === 'de' ? 'de' : 'en'] : id}“`
+    })
+    .join(', ')
+
   // ---- background tiles of the real result -----------------------------------------
   const effectiveStage: Stage = viewMode === 'single' || stage !== 'original' ? stage : 'result'
   const settingsKey = JSON.stringify(settings)
@@ -307,7 +327,7 @@ export function Viewer({
   const sessKey = `${img.id}|${tileStage}|${settings ? modelSettingsKey(settings) : ''}`
   const cropKey = keyOf(crop)
   useEffect(() => {
-    if (!api || !settings || !tileStage) return
+    if (!api || !settings || !tileStage || missingKey) return
     const ctrl = new AbortController()
     const timer = setTimeout(async () => {
       try {
@@ -326,7 +346,7 @@ export function Viewer({
       ctrl.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, img.id, sessKey, cropKey, visibleKey])
+  }, [api, img.id, sessKey, cropKey, visibleKey, missingKey, modelsRev])
 
   const sid = tiles?.sess.id
   useEffect(() => {
@@ -364,7 +384,7 @@ export function Viewer({
 
   // ---- quick preview of the visible region: debounced, cancellable, stale-while-loading
   useEffect(() => {
-    if (!api || !settings || effectiveStage === 'original' || !region) return
+    if (!api || !settings || effectiveStage === 'original' || !region || missingKey) return
     if (covered) {
       setBusy(false) // the real result is already there
       return
@@ -389,7 +409,7 @@ export function Viewer({
       ctrl.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, img.id, regionKey, ow, oh, settingsKey, effectiveStage, covered])
+  }, [api, img.id, regionKey, ow, oh, settingsKey, effectiveStage, covered, missingKey, modelsRev])
 
   const ratioFor = (key: string): number | null => {
     const a = ASPECTS.find((x) => x.key === key)?.ratio ?? null
@@ -691,6 +711,40 @@ export function Viewer({
         )}
       </div>
 
+      {missing.length > 0 && effectiveStage !== 'original' && (
+        <div
+          role="alert"
+          data-testid="missing-model"
+          className="absolute top-1/2 left-1/2 z-30 w-[360px] max-w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-dialog border border-line bg-panel p-5 shadow-2xl"
+        >
+          <h3 className="m-0 text-[15px] font-semibold">{t('models.missingTitle')}</h3>
+          <p className="mt-2 text-[13px] leading-relaxed text-text2">
+            {t('models.missingText', {
+              names: missingNames,
+              size: formatBytes(missingDl.total, i18n.language)
+            })}
+          </p>
+          {missingDl.error && <p className="mt-2 text-[12.5px] text-danger">{missingDl.error}</p>}
+          <div className="mt-3 flex justify-end">
+            {missingDl.active ? (
+              <span className="text-[13px] text-text2" role="status">
+                {t('models.downloading', {
+                  pct: missingDl.total ? Math.floor((100 * missingDl.done) / missingDl.total) : 0
+                })}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void downloadModels(missing)}
+                className="flex h-9 items-center gap-2 rounded-btn bg-accent px-4 font-semibold text-on-accent hover:bg-accent-hover"
+              >
+                <Download size={15} aria-hidden="true" />
+                {missingDl.error ? t('models.retry') : t('models.download')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {cropEditing && crop && (
         <div className="absolute top-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2">
           <Segmented<string>

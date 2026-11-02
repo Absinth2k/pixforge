@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { BackendError } from '@/components/BackendError'
 import { BatchBar } from '@/components/BatchBar'
 import { EmptyState } from '@/components/EmptyState'
+import { ModelSetup } from '@/components/ModelSetup'
+import { AboutDialog } from '@/components/AboutDialog'
 import { SettingsPanel } from '@/components/SettingsPanel'
 import { StatusBar } from '@/components/StatusBar'
 import { TitleBar } from '@/components/TitleBar'
@@ -56,6 +58,12 @@ export default function App() {
       cx: z === 'fit' ? image.width / 2 : (v?.cx ?? image.width / 2),
       cy: z === 'fit' ? image.height / 2 : (v?.cy ?? image.height / 2)
     })
+  }, [])
+
+  // Update state from the main process (about dialog, status bar)
+  useEffect(() => {
+    void window.pixforge.update.get().then((u) => useStore.setState({ update: u }))
+    return window.pixforge.update.onState((u) => useStore.setState({ update: u }))
   }, [])
 
   // Keyboard: Ctrl+O open, Ctrl+E export, 0/1/2 zoom, F faces, arrows switch images, Del remove.
@@ -145,6 +153,8 @@ export default function App() {
       {dragging && img && (
         <div className="pointer-events-none absolute inset-0 z-40 border-2 border-dashed border-accent bg-accent-soft" />
       )}
+      <ModelSetup />
+      <AboutDialog />
       <BackendError />
     </div>
   )
